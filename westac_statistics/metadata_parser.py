@@ -144,8 +144,33 @@ class MetadataParser:
 
         self.metadata["name"] = combined_names
 
+    @staticmethod
+    def __convert_date(date: str):
+        """Converts a date string to a datetime object.
+        
+        Is supposed to handle different types of date formats.
+        This was default behavious in earlier versions of Pandas but has since been removed.
+        
+        This handles variants of types:
+            - 2020
+            - 2020-01
+            - 2020-01-01
 
+        Args:
+            date (str): The date, as a string
 
+        Raises:
+            ValueError: If no valid date format is found
+
+        Returns:
+            DateTime: A pandas datetime object
+        """
+        for fmt in ('%Y', '%Y-%m-%d', '%Y-%m'):
+            try:
+                return pd.to_datetime(date, format=fmt)
+            except ValueError:
+                pass
+        raise ValueError(f'no valid date format found for string {date}')     
 
     def __fix_person_metata(self):
         df = self.metadata["person"]
@@ -157,12 +182,12 @@ class MetadataParser:
         df_g.born = df_g.born.apply(
             lambda x: sorted(x, key=len, reverse=False)[0]
         )  # Get longest possible date
-        df_g.born.apply(__convert_date)
+        df_g.born.apply(self.__convert_date)
 
         df_g.dead = df_g.dead.apply(
             lambda x: sorted(x, key=len, reverse=False)[0]
         )  # Get longest possible date
-        df_g.dead.apply(__convert_date)
+        df_g.dead.apply(self.__convert_date)
 
         # This ensures that there is no instance where a column has more than one unique value
         # in the "name" column, e.g. to ensure that a person has at most one guid and id
@@ -205,29 +230,4 @@ class MetadataParser:
                 speech_dataframe.loc[indexes, "party_affiliation_message"] = message
                 
                 
-def __convert_date(date: str):
-    """Converts a date string to a datetime object.
-    
-    Is supposed to handle different types of date formats.
-    This was default behavious in earlier versions of Pandas but has since been removed.
-    
-    This handles variants of type:
-        - 2020
-        - 2020-01
-        - 2020-01-01
-
-    Args:
-        date (str): The date, as a string
-
-    Raises:
-        ValueError: If no valid date format is found
-
-    Returns:
-        DateTime: A pandas datetime object
-    """
-    for fmt in ('%Y', '%Y-%m-%d', '%Y-%m'):
-        try:
-            return pd.to_datetime(date, format=fmt)
-        except ValueError:
-            pass
-    raise ValueError(f'no valid date format found for string {date}')                
+           
