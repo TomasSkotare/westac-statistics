@@ -9,6 +9,9 @@ import pandas as pd
 from bs4 import BeautifulSoup
 from tqdm.auto import tqdm
 
+import warnings
+warnings.warn("The ParseSpeakersFromXML class is deprecated and will be removed in future versions.", DeprecationWarning)
+
 
 @DeprecationWarning
 class ParseSpeakersFromXML:

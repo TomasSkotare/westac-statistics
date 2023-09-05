@@ -9,6 +9,8 @@ import numpy as np
 import pandas as pd
 from tqdm.auto import tqdm
 
+import warnings
+warnings.warn("The CorpusTokenizer class is deprecated and will be removed in future versions.", DeprecationWarning)
 
 class CorpusTokenizer:
     """The main intent of this class is to load a SPEECH_INDEX dataframe, 
