@@ -64,7 +64,7 @@ class MetadataParser:
             return [("unknown", False, "Unknown person") for x in range(len(dates))]
         df = aff[aff.wiki_id == who]
         if len(df) == 0:
-            print(f"{who} has no entry in party_affiliation!")
+            # print(f"{who} has no entry in party_affiliation!")
             return [("unknown_missing", False, "No listing") for x in range(len(dates))]
         if len(df) == 1:
             # Regardless of start/stop date, if there is only one option we choose it
@@ -145,7 +145,7 @@ class MetadataParser:
         self.metadata["name"] = combined_names
 
     @staticmethod
-    def __convert_date(date: str):
+    def convert_date(date: str):
         """Converts a date string to a datetime object.
         
         Is supposed to handle different types of date formats.
@@ -182,12 +182,12 @@ class MetadataParser:
         df_g.born = df_g.born.apply(
             lambda x: sorted(x, key=len, reverse=False)[0]
         )  # Get longest possible date
-        df_g.born.apply(self.__convert_date)
+        df_g.born = df_g.born.apply(self.convert_date)
 
         df_g.dead = df_g.dead.apply(
             lambda x: sorted(x, key=len, reverse=False)[0]
         )  # Get longest possible date
-        df_g.dead.apply(self.__convert_date)
+        df_g.dead = df_g.dead.apply(self.convert_date)
 
         # This ensures that there is no instance where a column has more than one unique value
         # in the "name" column, e.g. to ensure that a person has at most one guid and id
@@ -210,6 +210,9 @@ class MetadataParser:
         TODO: Add some threading here to improve time
         """
         speech_dataframe["party_affiliation"] = "unknown"
+        speech_dataframe["party_affiliation_uncertain"] = True # Assume uncertain. Should always be set anyway.
+        speech_dataframe["party_affiliation_message"] = ""
+        
         for name, group in tqdm(speech_dataframe[["who", "date"]].groupby("who")):
             date_grouping = (
                 group.reset_index()
@@ -225,6 +228,7 @@ class MetadataParser:
                 raise e
             for idx, (affil, uncertain, message) in enumerate(affiliation_per_date):
                 indexes = date_grouping.iloc[idx].values[0]
+
                 speech_dataframe.loc[indexes, "party_affiliation"] = affil
                 speech_dataframe.loc[indexes, "party_affiliation_uncertain"] = uncertain
                 speech_dataframe.loc[indexes, "party_affiliation_message"] = message

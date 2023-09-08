@@ -1,1 +1,4 @@
 dist/*
+riksdagens_corpus/*
+docker/mounts/*
+westac_statistics/__pycache__/*

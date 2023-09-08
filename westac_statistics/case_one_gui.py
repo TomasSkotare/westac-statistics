@@ -200,7 +200,7 @@ class CaseOneGUI:
         if mode == "token":
             pivot = (
                 data.groupby([temporal_key, filter_key])
-                .agg({"n_tokens": sum})
+                .agg({"n_tokens": 'sum'})
                 .unstack(level=1)
             )
         elif mode == "speech":

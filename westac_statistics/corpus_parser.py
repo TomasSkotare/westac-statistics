@@ -1,7 +1,7 @@
 import glob
 import json
 import os
-import sqlite3
+# import sqlite3
 from contextlib import closing
 from multiprocessing import Pool
 
@@ -27,7 +27,6 @@ class CorpusParser:
             date = pd.to_datetime(soup.find(lambda x: x.name == "docDate").text)
         except:
             pass
-
         protocol = None
         try:
             protocol = (
@@ -105,8 +104,7 @@ class CorpusParser:
             return p.map(self._get_speakers_df_from_file, self.xml_files)
 
     def read_speech_dataframe_from_db(self):
-        with closing(sqlite3.connect(self.database_file)) as con:
-            df = pd.read_sql("select * from speeches", con=con)
+        df = pd.read_feather(self.database_file)
         for col in [x for x in df.columns if x.endswith("_json")]:
             df[col.removesuffix("_json")] = df[col].apply(json.loads)
             df = df.drop(columns=col)
@@ -118,13 +116,9 @@ class CorpusParser:
             per_xml_dataframes = self.perform_threaded_parsing(threads=threads)
             if os.path.exists(self.database_file):
                 os.remove(self.database_file)
-            with closing(sqlite3.connect(self.database_file)) as con:
-                with closing(con.cursor()) as cur:
-                    for df in per_xml_dataframes:
-                        df.to_sql(
-                            name="speeches", con=con, if_exists="append", index=False
-                        )
-
+            df = pd.concat(per_xml_dataframes, ignore_index=True)
+            df.to_feather(self.database_file)
+        # Even if we just saved it, we load it to make sure it works
         self.speech_dataframe = self.read_speech_dataframe_from_db()
         # Drop empty speeches from dataframe
         self.empty_speeches = self.speech_dataframe[self.speech_dataframe.n_tokens == 0]

@@ -1,0 +1,12 @@
+version: '3'
+services:
+  jupyter-notebook:
+    build: .
+    ports:
+      - "9006:8888"
+    volumes:
+      - ./mounts:/home/jovyan/work
+      - ../westac_statistics:/home/jovyan/work/westac_statistics
+      - ../riksdagen-corpus/:/home/jovyan/work/riksdagen-corpus
+
+
