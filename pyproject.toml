@@ -1,13 +1,13 @@
 
 [tool.poetry]
-name = "westac_statistics"
-version = "0.2.4"
+name = "westac-statistics"
+version = "0.2.5"
 description = "Python statistics package for WeStAc, and the Swedish parliamentary proceedings"
 authors = ["TomasSkotare <tomas.skotare@umu.se>"]
-repository = "https://github.com/TomasSkotare/westac_statistics"
+repository = "https://github.com/TomasSkotare/westac-statistics"
 license = "MIT"
 readme = "README.md"
-packages = [{include = "westac_statistics"}]
+packages = [{include = "westac-statistics"}]
 
 
 [tool.poetry.dependencies]

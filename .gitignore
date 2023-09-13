@@ -1,6 +1,6 @@
 dist/*
 riksdagens_corpus/*
 docker/mounts/*
-westac_statistics/__pycache__/*
+westac-statistics/__pycache__/*
 docker/scripts/.ipynb_checkpoints/*
 docker/py_notebooks/.ipynb_checkpoints/*
