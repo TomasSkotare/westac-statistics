@@ -7,7 +7,7 @@ authors = ["TomasSkotare <tomas.skotare@umu.se>"]
 repository = "https://github.com/TomasSkotare/westac-statistics"
 license = "MIT"
 readme = "README.md"
-packages = [{include = "westac-statistics"}]
+packages = [{include = "westac_statistics"}]
 
 
 [tool.poetry.dependencies]
