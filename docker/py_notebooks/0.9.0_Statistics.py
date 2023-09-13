@@ -130,22 +130,6 @@ for col in complete_df.columns:
 complete_df.to_excel('input_member_of_parliament_by_missing_party.xlsx')
 complete_df
 
-# %%
-
-
-# %%
-
-# %%
-
-# %%
-df2
-
-# %%
-
-                 
-
-# %%
-
 # %% [markdown]
 # # Known people, who have no party in party_affiliation.csv
 
@@ -902,14 +886,14 @@ decade = df.groupby(['year','token_range']).count()['who'].rename('count')
 
 df2 = decade.reset_index()
 # px.bar(df2, x='year', y='count', color='token_range',barmode='group')
-df2.to_excel('./output/speech_count_per_token_count_per_year.xlsx')
+df2.to_excel(f'{output_path}/speech_count_per_token_count_per_year.xlsx')
 df2['order'] = df2.token_range.apply(lambda x: convert_table[x])
 df2 = df2.sort_values(by=['year','order'])
 display(px.line(df2, x='year', y='count', color='token_range'))
 
 df3 = df.groupby(['year','token_range']).count()['who'].rename('count').reset_index()
 df3['normalized_count'] = df3['count'] / df3.groupby('year')['count'].transform('sum')
-df3.to_excel('./output/speech_normalized_count_per_token_range_per_year.xlsx')
+df3.to_excel(f'{output_path}/speech_normalized_count_per_token_range_per_year.xlsx')
 df3['order'] = df3.token_range.apply(lambda x: convert_table[x])
 df3 = df3.sort_values(by='order')
 display(px.area(df3, x='year', y='normalized_count', color='token_range'))

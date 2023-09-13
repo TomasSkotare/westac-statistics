@@ -788,29 +788,26 @@ class FastCorpusTokenizer:
             df["Percentage"] = 100 * df.Count / total_words
             import os
 
-            os.makedirs(f'{output_directory}/word_length_counts/', exist_ok=True)
+            os.makedirs(f"{output_directory}/word_length_counts/", exist_ok=True)
             filename = f"{output_directory}/word_length_counts/{party}_{year}.xlsx"
             df.to_excel(filename, index=False)
 
-
-    @staticmethod            
+    @staticmethod
     @jit(nopython=True)
     def _calc_ttr(res, vec_words):
-        
         for w in vec_words:
             res[w] += 1
         unique = np.sum(res > 0)
         count = np.sum(res)
         # TTR = (number of unique words / total number of words) x 100
         if count > 0:
-            return  (unique / count) * 100
+            return (unique / count) * 100
         else:
             return -1
 
-
     def ttr_function(self, threads=24):
         """Using the vectorized text values, calculate the TTR for each speech
-        
+
         Note that this will ignore short words (less than 2 characters by default)
 
         Args:
@@ -821,20 +818,21 @@ class FastCorpusTokenizer:
         """
         word_count = self.word_count
         global worker_fun
-        
+
         def worker_fun(chunk):
             texts = self.VECTORIZED_TEX_DF.vectorized_text.values[chunk]
-            
+
             ttr_results = np.zeros(len(chunk), dtype=np.float64)
             res = np.zeros(word_count, dtype=np.uint16)
-            for i, text in enumerate(texts):   
+            for i, text in enumerate(texts):
                 ttr_results[i] = self.__class__._calc_ttr(res, text)
                 res[:] = 0
-                
+
             return ttr_results
+
         chunks = np.array_split(range(len(self.VECTORIZED_TEX_DF)), threads)
         with Pool(threads) as pool:
             results = pool.map(worker_fun, chunks)
         del worker_fun
-        
+
         return np.concatenate(results)

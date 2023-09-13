@@ -200,7 +200,7 @@ def ttr_per_decade_per_party_per_token_range(s_df, token_ranges = [(1,20,50), (2
 # NOTE THAT WE ONLY TAKE YEARS AFTER 1910 HERE AS IT IS NOT RELEVANT BEFORE
 plt, temp_df = ttr_per_decade_per_party_per_token_range(my_cft.SPEECH_INDEX[my_cft.SPEECH_INDEX.decade > 1910])
 plt
-    
+
 
 # %%
 # %%time

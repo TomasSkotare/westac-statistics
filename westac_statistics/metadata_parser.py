@@ -1,14 +1,19 @@
 import glob
-from multiprocessing import Pool
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from nltk.tokenize import word_tokenize
 from tqdm.auto import tqdm
 
 
 class MetadataParser:
+    """
+    This class is used to parse the metadata available in the corpus.
+    
+    Each metadata file is loaded into a pandas dataframe, and stored in a dictionary.
+    
+    In addition, some preprocessing is done to ensure that the data is in a usable format.
+    """
     def __init__(self, metadata_directory: str):
         self.csv_files = list(
             glob.iglob(metadata_directory + "/**/*.csv", recursive=True)
@@ -24,17 +29,23 @@ class MetadataParser:
         self.metadata["party_affiliation"] = aff
 
         self.__fix_name_metadata()
-        self.__fix_person_metata()
-
-    @staticmethod
-    def compare_dates(a, b):
-        if pd.isnan(a) or pd.isnan(b):
-            return np.inf
-        return
+        self.__fix_person_metadata()
 
     @staticmethod
     def get_closest_to_date(df, date):
-        # These can crash in the case that *all* end or start dates are not a time, just account for that
+        """This function returns the party that is closest to the specified date.
+        
+        This is not a perfect solution, but it is the best we have for now.
+
+        Args:
+            df (pandas.Dataframe): A dataframe with party affiliation data for a specific person
+            date: The date to look for, in a pandas datetime format
+
+        Returns:
+            _type_: _description_
+        """
+        # These can crash in the case that *all* end or start dates are not a time, 
+        # just account for that
         try:
             start_closest = np.argmin((df.start_dt - date).abs())
         except:
@@ -116,6 +127,19 @@ class MetadataParser:
 
     @staticmethod
     def join_on(df1, df2, column, delete_join=False):
+        """This function joins two dataframes on a specific column.
+        
+        If the number of rows changes, a warning is printed.
+
+        Args:
+            df1 (_type_): The first dataframe
+            df2 (_type_): The second dataframe
+            column (_type_): The column to join on
+            delete_join (bool, optional): If true, the column is dropped from the resulting dataframe. Defaults to False.
+
+        Returns:
+            pandas.DataFrame: The joined dataframe
+        """
         len_before = len(df1)
         df = df1.set_index(column).join(df2.set_index(column), how="left").reset_index()
         if len(df) != len_before:
@@ -147,10 +171,10 @@ class MetadataParser:
     @staticmethod
     def convert_date(date: str):
         """Converts a date string to a datetime object.
-        
+
         Is supposed to handle different types of date formats.
         This was default behavious in earlier versions of Pandas but has since been removed.
-        
+
         This handles variants of types:
             - 2020
             - 2020-01
@@ -165,14 +189,14 @@ class MetadataParser:
         Returns:
             DateTime: A pandas datetime object
         """
-        for fmt in ('%Y', '%Y-%m-%d', '%Y-%m'):
+        for fmt in ("%Y", "%Y-%m-%d", "%Y-%m"):
             try:
                 return pd.to_datetime(date, format=fmt)
             except ValueError:
                 pass
-        raise ValueError(f'no valid date format found for string {date}')     
+        raise ValueError(f"no valid date format found for string {date}")
 
-    def __fix_person_metata(self):
+    def __fix_person_metadata(self):
         df = self.metadata["person"]
         df.born = df.born.astype(str)
         df.dead = df.dead.astype(str)
@@ -207,12 +231,22 @@ class MetadataParser:
 
     def add_affiliation(self, speech_dataframe):
         """
-        TODO: Add some threading here to improve time
+        This function adds party affiliation to each speech in the dataframe.
+        
+        As the same speaker can have different party affiliations at different times,
+        we attempt to find the correct party affiliation for each speech.
+        
+        This is not a perfect solution, and some speeches will be marked as uncertain.
+        
+        The reason for this is that some speakers have no party affiliation, and some have
+        overlapping dates or missing dates.
         """
         speech_dataframe["party_affiliation"] = "unknown"
-        speech_dataframe["party_affiliation_uncertain"] = True # Assume uncertain. Should always be set anyway.
+        speech_dataframe[
+            "party_affiliation_uncertain"
+        ] = True  # Assume uncertain. Should always be set anyway.
         speech_dataframe["party_affiliation_message"] = ""
-        
+
         for name, group in tqdm(speech_dataframe[["who", "date"]].groupby("who")):
             date_grouping = (
                 group.reset_index()
@@ -232,6 +266,3 @@ class MetadataParser:
                 speech_dataframe.loc[indexes, "party_affiliation"] = affil
                 speech_dataframe.loc[indexes, "party_affiliation_uncertain"] = uncertain
                 speech_dataframe.loc[indexes, "party_affiliation_message"] = message
-                
-                
-           

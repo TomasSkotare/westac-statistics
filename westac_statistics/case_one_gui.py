@@ -9,6 +9,13 @@ pd.options.mode.chained_assignment = None
 
 
 class CaseOneGUI:
+    """This is a small GUI component for showing plots and 
+    tables in a Jupyter notebook.
+    
+
+    Returns:
+        _type_: A CaseOneGUI object.
+    """
     PARTY_COLORS = {
         "C": "rgba(0,   153,  51,0)",
         "FI": "rgba(205,  27, 104,0)",
@@ -103,7 +110,6 @@ class CaseOneGUI:
         return self
 
     def update(self):
-
         opts: dict = dict(
             temporal_key=self.period.value,
             filter_key=self.filter_key,
@@ -152,6 +158,7 @@ class CaseOneGUI:
                 plot_type = px.line
             elif kind == "area":
                 plot_type = px.area
+
                 # See https://stackoverflow.com/a/66521215 for this fix
                 def area_fun(p):
                     p.for_each_trace(
@@ -185,7 +192,6 @@ class CaseOneGUI:
         normalize: bool,
         mode: str
     ):
-
         data: pd.DataFrame = self.speech_df.copy()
 
         if filter_value:
@@ -200,7 +206,7 @@ class CaseOneGUI:
         if mode == "token":
             pivot = (
                 data.groupby([temporal_key, filter_key])
-                .agg({"n_tokens": 'sum'})
+                .agg({"n_tokens": "sum"})
                 .unstack(level=1)
             )
         elif mode == "speech":

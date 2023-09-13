@@ -12,6 +12,7 @@ from .corpus_fast_tokenizer import FastCorpusTokenizer
 from tqdm.auto import tqdm
 from numba import jit
 
+
 class TF_IDF_Calculator:
     TOKENIZER: FastCorpusTokenizer
     SPARSE_COUNT_TRANSPOSED: spmatrix
@@ -143,8 +144,6 @@ class TF_IDF_Calculator:
             df = pd.DataFrame(group_data)
 
             df.to_excel(f"{output_directory}{party}_{year}.xlsx")
-
-
 
 
 if __name__ == "__main__":
