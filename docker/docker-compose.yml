@@ -5,6 +5,7 @@ services:
     volumes:
       - ./mounts:/home/jovyan/work
       - ./scripts:/home/jovyan/work/scripts
+      - ./py_notebooks:/home/jovyan/work/py_notebooks
       - ../westac_statistics:/home/jovyan/work/westac_statistics
       - ../riksdagen-corpus/:/home/jovyan/work/riksdagen-corpus
     command: >
