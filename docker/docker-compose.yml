@@ -7,7 +7,7 @@ services:
       - ./scripts:/home/jovyan/scripts
       - ./py_notebooks:/home/jovyan/py_notebooks
       - ./reference_files:/home/jovyan/work/reference_files
-      - ../westac-statistics:/home/jovyan/work/westac-statistics
+      - ../westac_statistics:/home/jovyan/work/westac_statistics
       - ../riksdagen-corpus/:/home/jovyan/work/riksdagen-corpus
     command: >
       bash -c "set -e &&
