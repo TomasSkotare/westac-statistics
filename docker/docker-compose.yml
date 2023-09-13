@@ -1,12 +1,20 @@
 version: '3'
 services:
-  jupyter-notebook:
-    build: .
-    ports:
-      - "9006:8888"
+  jupyter:
+    image: jupyter/datascience-notebook:r-4.3.1
     volumes:
       - ./mounts:/home/jovyan/work
+      - ./scripts:/home/jovyan/work/scripts
       - ../westac_statistics:/home/jovyan/work/westac_statistics
       - ../riksdagen-corpus/:/home/jovyan/work/riksdagen-corpus
-
-
+    command: >
+      bash -c "set -e &&
+               pip install jupytext &&
+               pushd /home/jovyan/work/scripts &&
+               chmod +x ./py_to_notebook.sh &&
+               chmod +x ./notebook_to_py.sh &&
+               ./py_to_notebook.sh &&
+               popd &&
+               start-notebook.sh"
+    ports:
+      - 9006:8888
