@@ -786,6 +786,9 @@ class FastCorpusTokenizer:
             )
             total_words = df.Count.sum()
             df["Percentage"] = 100 * df.Count / total_words
+            import os
+
+            os.makedirs(f'{output_directory}/word_length_counts/', exist_ok=True)
             filename = f"{output_directory}/word_length_counts/{party}_{year}.xlsx"
             df.to_excel(filename, index=False)
 

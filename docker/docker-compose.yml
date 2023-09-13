@@ -4,14 +4,15 @@ services:
     image: jupyter/datascience-notebook:r-4.3.1
     volumes:
       - ./mounts:/home/jovyan/work
-      - ./scripts:/home/jovyan/work/scripts
-      - ./py_notebooks:/home/jovyan/work/py_notebooks
+      - ./scripts:/home/jovyan/scripts
+      - ./py_notebooks:/home/jovyan/py_notebooks
+      - ./reference_files:/home/jovyan/work/reference_files
       - ../westac_statistics:/home/jovyan/work/westac_statistics
       - ../riksdagen-corpus/:/home/jovyan/work/riksdagen-corpus
     command: >
       bash -c "set -e &&
                pip install jupytext &&
-               pushd /home/jovyan/work/scripts &&
+               pushd /home/jovyan/scripts &&
                chmod +x ./py_to_notebook.sh &&
                chmod +x ./notebook_to_py.sh &&
                ./py_to_notebook.sh &&

@@ -1,12 +1,12 @@
 #!/bin/bash
 
 # Define the directories
-notebook_dir="../notebooks"
+notebook_dir="../work/notebooks"
 python_dir="../py_notebooks"
 
 # Convert relative paths to absolute paths
-notebook_dir=$(realpath "$notebook_dir")
 python_dir=$(realpath "$python_dir")
+notebook_dir=$(realpath "$notebook_dir")
 
 # Remove trailing slash from python_dir if present
 python_dir="${python_dir%/}"

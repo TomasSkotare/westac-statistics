@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Define the directories
-notebook_dir="../notebooks"
+notebook_dir="../work/notebooks"
 python_dir="../py_notebooks"
 
 # Convert relative paths to absolute paths
