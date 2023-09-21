@@ -920,5 +920,8 @@ with pd.option_context('display.max_rows', None, 'display.max_columns', None):
     display(pd.DataFrame(df.groupby('who_intro').who.nunique().sort_values(ascending=False).items(), columns=['Intro','Count']).head(100))
 
 # %%
+MD('##Test of finding words in metadata')
 
-# %%
+for name, df in metadata.find_words_in_metadata(words = ['Robert','Johansson']).items():
+    print(name)
+    display(df)
