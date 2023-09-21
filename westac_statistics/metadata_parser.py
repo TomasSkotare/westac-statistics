@@ -266,3 +266,48 @@ class MetadataParser:
                 speech_dataframe.loc[indexes, "party_affiliation"] = affil
                 speech_dataframe.loc[indexes, "party_affiliation_uncertain"] = uncertain
                 speech_dataframe.loc[indexes, "party_affiliation_message"] = message
+                
+    @staticmethod
+    def find_rows_with_all_words(df, words):
+        """
+        This function checks if all words in the provided list are present in each row of the DataFrame.
+        It handles string, numeric, NaN, and list data types in the DataFrame.
+        It returns the rows where all words are found.
+        """
+        # Convert words to lowercase for case-insensitive search
+        words = [word.lower() for word in words]
+
+        # Create a mask for rows that contain all words
+        mask = df.apply(
+            lambda row: all(
+                word in ' '.join(str(i) for i in row) if isinstance(row, list) 
+                else word in str(row).lower() 
+                for word in words
+            ), 
+            axis=1
+        )
+
+        # Return rows that contain all words
+        return df[mask]
+
+
+    def find_words_in_metadata(self, words):
+        """
+        This function iterates over all DataFrames in the metadata and uses the find_rows_with_all_words function
+        to find and returns dataframes with rows where all words are found.
+        """
+        
+        dfs_containing_metata = {}
+        # Iterate over all DataFrames in the metadata
+        for name, df in self.metadata.items():
+            
+            # Use the find_rows_with_all_words function to find and display the rows where all words are found
+            df = self.__class__.find_rows_with_all_words(df, words)
+            
+            # If any rows are found, add the DataFrame to the return_dfs dictionary
+            if len(df) > 0:
+                dfs_containing_metata[name] = df
+                
+        return dfs_containing_metata
+
+        
