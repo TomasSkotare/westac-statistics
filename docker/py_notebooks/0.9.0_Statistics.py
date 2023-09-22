@@ -800,7 +800,7 @@ with pd.option_context('display.max_rows', None, 'display.max_columns', None):
 
 # %%
 import plotly.figure_factory as ff
-MD('#Overlap visualization... Remove?')
+MD('# Overlap visualization... Remove?')
 display(df2[df2.wiki_id == 'Q5556026'])
 df3 = metadata.metadata['party_affiliation']
 display(df3[df3.wiki_id == 'Q5556026'])

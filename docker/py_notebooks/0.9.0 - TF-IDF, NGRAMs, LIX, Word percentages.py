@@ -373,3 +373,50 @@ Note that the colors cannot be compared between decades, as each decade has dens
 fig = get_ttr_by_decade_distribution(df)
 fig.savefig(f'{output_path}/ttr_by_number_of_tokens_per_decade.pdf')
 
+
+# %%
+from tqdm.auto import tqdm
+MD('# Till mig och Johan, skulle du kunna ta fram en beräkning på\n ## 1) hur många totalt unika ord det är för decennium och för parti, \n## 2) en ttr för varje decennium (och inte fördelat på parti)?')
+
+
+# MERGE THIS WITH SPEECH
+vectorized = my_cft.VECTORIZED_TEX_DF
+number_of_words = my_cft.word_count
+
+df = SPEECH_INDEX
+df['decade'] = df.year.apply(lambda x: int(x/10) * 10)
+data_list = []
+for (party, decade), group in tqdm(SPEECH_INDEX.groupby(['party_abbrev','decade'])):
+    word_count = np.zeros(number_of_words,dtype=np.uint32)
+    vectorized_words_spoken = np.concatenate(vectorized.loc[group.index].vectorized_text.values)
+    np.add.at(word_count, vectorized_words_spoken, 1)
+    data_list.append((party, decade, np.sum(word_count > 1)))
+
+
+from contextlib import contextmanager
+
+@contextmanager
+def custom_format(format_string):
+    original_format = pd.options.display.float_format
+    pd.options.display.float_format = format_string
+    try:
+        yield
+    finally:
+        pd.options.display.float_format = original_format
+
+party_df = pd.DataFrame(data_list, columns = ['Party','Decade','Unique words'])
+party_df = party_df.pivot(index='Party', columns='Decade', values='Unique words')
+MD('# Number of unique words spoken per party per decade')
+with custom_format('{:.0f}'.format):
+    display(party_df)
+    party_df.to_excel(f'{output_path}/unique_words_spoken_per_party_per_decade.xlsx')
+
+
+with custom_format('{:.0f}'.format):
+    MD('Mean TTR per decade and party')
+    display(df[['party_abbrev','decade','ttr']].groupby(['party_abbrev', 'decade']).agg('mean').reset_index().pivot(index='party_abbrev', columns='decade', values='ttr'))
+
+MD('Mean TTR per decade')
+df.groupby('decade').ttr.mean().to_frame()
+
+# %%
