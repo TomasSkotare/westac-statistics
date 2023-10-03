@@ -801,10 +801,10 @@ with pd.option_context('display.max_rows', None, 'display.max_columns', None):
 # %%
 import plotly.figure_factory as ff
 MD('# Overlap visualization... Remove?')
-display(df2[df2.wiki_id == 'Q5556026'])
+display(df2[df2.wiki_id == 'Q3369258'])
 df3 = metadata.metadata['party_affiliation']
-display(df3[df3.wiki_id == 'Q5556026'])
-df4 = df3[df3.wiki_id == 'Q5556026'][['party','start_dt','end_dt']]
+display(df3[df3.wiki_id == 'Q3369258'])
+df4 = df3[df3.wiki_id == 'Q3369258'][['party','start_dt','end_dt']]
 df4.columns = ['Task','Start','Finish']
 ff.create_gantt(df4)
 
@@ -897,6 +897,106 @@ df3.to_excel(f'{output_path}/speech_normalized_count_per_token_range_per_year.xl
 df3['order'] = df3.token_range.apply(lambda x: convert_table[x])
 df3 = df3.sort_values(by='order')
 display(px.area(df3, x='year', y='normalized_count', color='token_range'))
+
+# %%
+#  ta fram hur många unika MPs för ett visst parti det fanns för varje årtionde? Isf skulle det väl vara ett någorlunda rimligt sätt att normalisera unika ord?
+df = metadata.metadata['member_of_parliament'].copy()
+df.start = df.start.apply(metadata.convert_date)
+df.end = df.end.apply(metadata.convert_date)
+year_to_range = lambda year: (pd.to_datetime(f'{year}-01-01 00:00:00'), pd.to_datetime(f'{year}-12-31 23:59:59'))
+decade_to_range = lambda year: (pd.to_datetime(f'{year//10*10}-01-01 00:00:00'), pd.to_datetime(f'{year//10*10+9}-12-31 23:59:59'))
+
+start_date,  end_date = decade_to_range(2001)
+
+filtered_df = df[((df['start'] <= end_date) & (df['end'] >= start_date))]
+
+
+def check_values(df, column, values):
+    # Get the unique values in 'column' that are in the 'values' list
+    found_values = df[df[column].isin(values)]
+    
+
+    # Convert the found values to a set
+    found_values_set = set(found_values[column].values)
+
+    # Convert the original values to a set
+    values_set = set(values)
+
+    # Find the values that were not found
+    not_found_values = values_set - found_values_set
+
+
+
+    # Print a tally of how many values were found vs not found
+    print(f"Number of values found: {len(found_values_set)}")
+    print(f"Number of values not found: {len(not_found_values)}")
+
+    # Print the values that were not found
+    if not_found_values:
+        print(f"The following values were not found: {', '.join(not_found_values)}")
+        
+    return found_values
+
+from IPython.display import HTML
+
+df_html = filtered_df.sort_values(by='start').to_html()
+
+
+# HTML(f'<div style="max-height: 1000px; overflow: auto;">{df_html}</div>')
+check_values(metadata.metadata['party_affiliation'], 'wiki_id', filtered_df.wiki_id.values).party.value_counts()
+
+# %%
+tst1 = check_values(metadata.metadata['party_affiliation'], 'wiki_id', filtered_df.wiki_id.values).groupby('wiki_id')['party'].agg('unique').to_frame()
+tst1
+tst1['party_count'] = tst1.party.apply(len)
+for who in tst1[tst1.party_count > 1].index.values:
+    closest, uncertain, message = metadata.get_affiliation_from_dates(who, [pd.to_datetime('2006-01-01')])[0]
+    print(who, ':', closest, ' - ', uncertain, ' - ', message)
+    tst1.loc[who].party = [closest]
+
+
+tst1.party = tst1.party.apply(lambda x: x[0])
+tst1.drop(columns='party_count').party.value_counts()
+
+# %%
+SPEECH_INDEX['decade'] = SPEECH_INDEX.year.apply(lambda x: int(x / 10) * 10)
+df = SPEECH_INDEX[SPEECH_INDEX.decade == 2010].groupby('who').agg(list)
+df.party_affiliation = df.party_affiliation.apply(np.unique)
+df.party_affiliation.value_counts()
+
+# %%
+tst1.party.value_counts()
+
+# %%
+check_values(metadata.metadata['party_affiliation'], 'wiki_id', filtered_df.wiki_id.values).groupby('wiki_id').party.agg('unique')
+
+# %%
+check_values(metadata.metadata['party_affiliation'], 'wiki_id', filtered_df.wiki_id.values).wiki_id.value_counts()
+
+# %%
+# Vi kör på 0.10.x
+# Ny data för spann (antal tokens)
+# LIX-värdet 
+# Långa ord, hur många tecken ett ord innehåller (blir excel-dokument)
+# TTR, 4 olika, för decennium och parti
+# Fraser, när jag tog fram 7-grams (bara 7-grams vi är intresserad av) så vill vi ändra så att ord med bara ett tecken tas bort.
+#   För just denna metod vill vi ha med alla ord!
+# Samma kolumner som sist med TF-IDF osv osv
+# VI MÅSTE UNDERSÖKA TF-IDF ännu en gång'
+### 1920
+###### Även en variant som är rankad helt efter Total Count och inte TF-IDF
+###### I den absoluta listan ska inte stoppordlistan användas!
+
+
+# %%
+
+# %%
+
+# %%
+
+# %%
+
+# %%
 
 # %%
 MD('# BELOW THIS, WE HAVE TEMPORARY TESTS; IGNORE')

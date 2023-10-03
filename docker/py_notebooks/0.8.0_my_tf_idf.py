@@ -293,7 +293,7 @@ for col in range(allowed_per_col.shape[1]):
 #         data = document_texts[idx]
 #         group_ngrams.append((uids[idx], allowed_ngrams_per_doc(data, allowed_per_col, ngram_length)))
 #     group_results.append((name, group_ngrams))
-    
+
 
 # %%
 # uid_ngrams = []
@@ -424,7 +424,7 @@ for idx, uid_ngrams in enumerate(ngrams_per_uid):
 # %%
 uid_ngram_sparse
 allowed_ngrams
-    
+
 
 # %%
 def ngram_to_word(ngram):
@@ -474,7 +474,7 @@ df.iloc[1].text_merged
 # tst = np.array(range(100))
 
 # all_hashes = threaded_hashing(12)
-    
+
 
 # %%
 # %%time
@@ -607,7 +607,7 @@ for row, ((name, year), text) in tqdm(enumerate(group_texts.items())):
     df.to_excel(f'./output/{corpus_version}/results/tf-idf_{our_ngram_range}/{year}_{name}.xlsx')
     
     # display(df.head(10))
-    
+
 
 # %%
 

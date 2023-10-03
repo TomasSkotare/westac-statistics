@@ -684,7 +684,7 @@ scroll_display(SPEECH_INDEX[SPEECH_INDEX.who=='Q543409'])
 df = join_on(all_tables['persons_of_interest'], all_tables['party'], 'party_id')
 df = df[np.isnan(df.party_id)]
 scroll_display(df.sort_values(by='year_of_birth'))
-    
+
 
 # %%
 ### import plotly.express as px

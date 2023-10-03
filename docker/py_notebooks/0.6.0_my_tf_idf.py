@@ -78,7 +78,7 @@ for ngram in list(relevant_ngram_vocabolary):
         if matching:
             remove_list.append(ngram)
             break
-            
+
 
 # %%
 print(f'Remove list of length: {len(remove_list)}')
@@ -196,7 +196,7 @@ for row, ((name, year), text) in tqdm(enumerate(group_texts.items())):
     df.to_excel(f'./output/{corpus_version}/results/tf-idf_{our_ngram_range}/{year}_{name}.xlsx')
     
     # display(df.head(10))
-    
+
 
 # %%
 
@@ -319,7 +319,7 @@ with WordCounter('speech_index_db.db') as wc:
         vectorizer = CountVectorizer()
         tokenized_string = vectorizer.build_analyzer()(text)
         group_int_texts[name] = np.array([wc.query_word(word) for word in tqdm(tokenized_string)],dtype=np.int32)
-            
+
 
 # %%
 group_int_texts[('M', 1960)].shape

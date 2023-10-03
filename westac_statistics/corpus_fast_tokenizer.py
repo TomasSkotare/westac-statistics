@@ -40,6 +40,9 @@ class FastCorpusTokenizer:
     DOCUMENT_FREQUENCY_MOD: np.array
     DOCUMENT_TOTAL_COUNT: np.array
 
+    # The number of threads to use when running in parallel
+    THREADS: int
+
     @property
     def word_count(self):
         return len(self.CONVERT_DICT)
@@ -82,6 +85,8 @@ class FastCorpusTokenizer:
         self.NGRAM_LENGTH = ngram_length
         self.MINIMUM_NGRAM_COUNT = minimum_ngram_count
         self.REGEX_PATTERN = regex_pattern
+        
+        self.THREADS = threads
 
         print("Finding all words in corpus...")
         self.CONVERT_DICT, self.INDEX_TO_WORD = self.threaded_find_words(
@@ -111,7 +116,7 @@ class FastCorpusTokenizer:
         else:
             self.STOP_WORD_ARRAY = np.zero(self.word_count, dtype=np.bool)
 
-        self.MERGED_NGRAMS, self.MERGED_COUNTER = self.threaded_ngram_counting(24)
+        self.MERGED_NGRAMS, self.MERGED_COUNTER = self.threaded_ngram_counting(threads)
 
         # Allow ngrams with at least minimum_ngram_count occurances
         self.ALLOWED_NGRAMS = self.MERGED_NGRAMS[
@@ -492,8 +497,7 @@ class FastCorpusTokenizer:
         def merge_sorted_arrays(a, b, ac, bc):
             """Merge two sorted arrays into one sorted array."""
             if a.shape[1] != b.shape[1]:
-                print("Error! Shapes not same!")
-                return
+                raise ValueError("Error! Shapes not same!")
             merged = np.zeros((len(a) + len(b), a.shape[1]), dtype=np.uint32)
             merged_c = np.zeros(len(a) + len(b), dtype=np.uint32)
             m_idx = 0
@@ -660,7 +664,6 @@ class FastCorpusTokenizer:
 
         def worker_fun(chunk):
             df = self.SPEECH_INDEX
-            word_count = np.zeros(self.word_count)
             lix_results = np.zeros(len(chunk), dtype=np.float64)
             for i, idx in enumerate(chunk):
                 text = df.text_merged.values[idx]

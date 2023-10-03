@@ -705,7 +705,7 @@ results = SPEECH_INDEX.text_merged.swifter.apply(nltk.word_tokenize)
 
 # for idx in tqdm(range(len(SPEECH_INDEX))):
 #     word_results[idx] = create_word_index(SPEECH_INDEX.iloc[idx].text_merged)
-    
+
 
 # %%
 results=None
@@ -1101,7 +1101,7 @@ for h, repeats in df.hash.value_counts().items():
                         'text':this_df.iloc[0].text[0]
                        })
 pd.DataFrame(new_df_list).head(20)
- 
+
 
 # %%
 import matplotlib.pyplot as plt
