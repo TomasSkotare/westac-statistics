@@ -44,7 +44,7 @@ from IPython.display import display
 
 import plotly.express as px
 
-corpus_version_string = "0.9.0"
+corpus_version_string = "0.10.0"
 output_path = f'./output/{corpus_version_string}/'
 Path(output_path).mkdir(parents=True, exist_ok=True)
 

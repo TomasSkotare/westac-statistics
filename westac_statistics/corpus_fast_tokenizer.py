@@ -102,7 +102,7 @@ class FastCorpusTokenizer:
         print("Vectorizing documents...")
         start = pd.Timestamp.now()
         self.VECTORIZED_DOCUMENTS, self.SUMMED_WORD_COUNTS = self.vectorize_documents(
-            threads=threads
+            threads=threads, pattern = self.REGEX_PATTERN
         )
         self.VECTORIZED_TEX_DF = pd.DataFrame(
             [{"u_id": x, "vectorized_text": y} for x, y in self.VECTORIZED_DOCUMENTS]
@@ -398,7 +398,7 @@ class FastCorpusTokenizer:
         index_to_word = [k for k, v in convert_dict.items()]
         return convert_dict, index_to_word
 
-    def vectorize_documents(self, threads: int):
+    def vectorize_documents(self, threads: int, pattern=R"(?u)\b\w\w+\b"):
         global worker_fun
 
         def worker_fun(chunk):
@@ -411,7 +411,7 @@ class FastCorpusTokenizer:
                 vectorized_text = np.array(
                     [
                         convert_dict[x]
-                        for x in nltk.regexp_tokenize(text, pattern=R"(?u)\b\w\w+\b")
+                        for x in nltk.regexp_tokenize(text, pattern=pattern)
                     ],
                     dtype=np.uint32,
                 )

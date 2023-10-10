@@ -67,7 +67,6 @@ class TF_IDF_Calculator:
                 "tf": group_tf,
                 "tfidf": group_tfidf,
             }
-            # break ## TODO: REMOVE THIS BREAK
         return group_data
 
     def group_data_to_dataframe(self, group_data, no_to_return: int = 1000, threads=24):
@@ -80,7 +79,6 @@ class TF_IDF_Calculator:
 
         def worker_fun(chunk):
             worker_keys = [name_keys[x] for x in chunk]
-            worker_results = []
             for name in worker_keys:
                 group = group_data[name]
                 group_results = []
