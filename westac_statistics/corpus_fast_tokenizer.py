@@ -21,6 +21,7 @@ class FastCorpusTokenizer:
     INDEX_TO_WORD: list
     # The word length for each word in the CONVERT_DICT (in order)
     WORD_LENGTH: np.array
+    # The documents with words replaced by integers, in this case np.uint32
     VECTORIZED_DOCUMENTS: list
     # How many times each word was used
     SUMMED_WORD_COUNTS: np.array
@@ -37,7 +38,7 @@ class FastCorpusTokenizer:
     WORD_TO_NGRAM_INDEXES: np.array
     SPARSE_COUNT: dok_matrix
     DOCUMENT_FREQUENCY: np.array
-    DOCUMENT_FREQUENCY_MOD: np.array
+    INVERSE_DOCUMENT_FREQUENCY_MODIFIER: np.array
     DOCUMENT_TOTAL_COUNT: np.array
 
     # The number of threads to use when running in parallel
@@ -73,93 +74,152 @@ class FastCorpusTokenizer:
         return SPEECH_INDEX
 
     def __init__(
+
         self,
-        SPEECH_INDEX: pd.DataFrame,
-        ngram_length=7,
-        threads: int = 24,
-        stop_word_file: str = None,
-        minimum_ngram_count: int = 10,
-        regex_pattern=R"(?u)\b\w\w+\b",
+        SPEECH_INDEX: pd.DataFrame,  # A DataFrame containing the speech index
+        ngram_length=7,  # The length of the n-grams to be used, default is 7
+        threads: int = 24,  # The number of threads to be used for parallel processing, default is 24
+        stop_word_file: str = None,  # The file containing stop words, default is None
+        minimum_ngram_count: int = 10,  # The minimum count for an n-gram to be considered, default is 10
+        regex_pattern=R"(?u)\b\w\w+\b",  # The regex pattern to be used for word matching, default is any word of length 2 or more
     ):
+        """
+        Initializes the instance with the given parameters and performs several preprocessing steps on the speech index.
+
+        Parameters:
+        SPEECH_INDEX (pd.DataFrame): A DataFrame containing the speech index.
+        ngram_length (int, optional): The length of the n-grams to be used. Defaults to 7.
+        threads (int, optional): The number of threads to be used for parallel processing. Defaults to 24.
+        stop_word_file (str, optional): The file containing stop words. Defaults to None.
+        minimum_ngram_count (int, optional): The minimum count for an n-gram to be considered. Defaults to 10.
+        regex_pattern (str, optional): The regex pattern to be used for word matching. Defaults to any word of length 2 or more.
+
+        The function performs the following steps:
+        1. Finds all words in the corpus.
+        2. Vectorizes the documents in the corpus.
+        3. Loads stop words from a file if provided, otherwise initializes an array of zeros.
+        4. Counts the n-grams in the corpus.
+        5. Filters out the n-grams that occur less than the minimum count.
+        6. Calculates which words are involved in each column of the n-grams.
+        7. Gets the indexes of the n-grams for each word.
+        8. Counts the valid n-grams for each uid.
+        9. Creates a sparse matrix from the n-gram counts.
+        10. Calculates the document frequency, modified document frequency, and total count for each n-gram.
+        """
+        
+        # Initialize instance variables
         self.SPEECH_INDEX = SPEECH_INDEX
         self.NGRAM_LENGTH = ngram_length
         self.MINIMUM_NGRAM_COUNT = minimum_ngram_count
         self.REGEX_PATTERN = regex_pattern
-        
         self.THREADS = threads
 
-        print("Finding all words in corpus...")
+        print("Finding all unique words in corpus...")
+        # Find all words in the corpus using multiple threads
         self.CONVERT_DICT, self.INDEX_TO_WORD = self.threaded_find_words(
             threads=threads
         )
+        # Calculate the length of each word and store it as a numpy array
         self.WORD_LENGTH = np.array(
             [len(x) for x in self.INDEX_TO_WORD], dtype=np.uint16
         )
         print("Found ", len(self.CONVERT_DICT), "words in corpus.")
 
-        # Calculate time of call:
-
         print("Vectorizing documents...")
+        # Record the start time of the vectorization process
         start = pd.Timestamp.now()
+        # Vectorize the documents using multiple threads
         self.VECTORIZED_DOCUMENTS, self.SUMMED_WORD_COUNTS = self.vectorize_documents(
             threads=threads, pattern = self.REGEX_PATTERN
         )
+        # Create a DataFrame from the vectorized documents
         self.VECTORIZED_TEX_DF = pd.DataFrame(
             [{"u_id": x, "vectorized_text": y} for x, y in self.VECTORIZED_DOCUMENTS]
         )
+        # Record the end time of the vectorization process
         end = pd.Timestamp.now()
         print("Vectorizing took ", end - start, " seconds.")
 
+        # If a stop word file is provided, load the stop words from the file
         if stop_word_file:
             print(f"Loading stop words from file: {stop_word_file}")
             self.STOP_WORD_ARRAY = self.load_stop_words(stop_word_file)
         else:
+            # If no stop word file is provided, initialize an array of zeros
             self.STOP_WORD_ARRAY = np.zero(self.word_count, dtype=np.bool)
 
+        # Count the n-grams in the corpus using multiple threads
         self.MERGED_NGRAMS, self.MERGED_COUNTER = self.threaded_ngram_counting(threads)
 
-        # Allow ngrams with at least minimum_ngram_count occurances
+        # Filter out the n-grams that occur less than the minimum count
         self.ALLOWED_NGRAMS = self.MERGED_NGRAMS[
             self.MERGED_COUNTER >= minimum_ngram_count, :
         ]
         self.ALLOWED_COUNTER = self.MERGED_COUNTER[
             self.MERGED_COUNTER >= minimum_ngram_count
         ]
-
+        
+        # Print the percentage of n-grams that are being kept based on the minimum count criteria
         print(
             f"Keeping {(self.ALLOWED_NGRAMS.shape[0] / self.MERGED_NGRAMS.shape[0]) * 100:.2f}% of ngrams."
         )
 
         print("Calculating which words are involved in each column...")
+        # Initialize a boolean array to keep track of which words are involved in each column of the n-grams
         self.ALLOWED_PER_COL = np.zeros(
             (len(self.CONVERT_DICT), self.NGRAM_LENGTH), dtype=bool
         )
+        # For each column, mark the words that are involved in the n-grams
         for col in range(self.ALLOWED_PER_COL.shape[1]):
             self.ALLOWED_PER_COL[self.ALLOWED_NGRAMS[:, col], col] = True
 
+        # Get the indexes of the n-grams for each word
         self.WORD_TO_NGRAM_INDEXES = self.get_word_to_ngram_index()
 
         print("Calculating valid ngrams per uid...")
+        # Record the start time of the n-gram counting process
         start = pd.Timestamp.now()
+        # Count the valid n-grams for each uid using multiple threads
         self.NGRAMS_PER_UID = self.threaded_valid_ngram_counting(threads=threads)
+        # Record the end time of the n-gram counting process
         end = pd.Timestamp.now()
         print("Calculating valid ngrams took ", end - start, " seconds.")
 
         print("Creating sparse matrix...")
+        # Create a sparse matrix from the n-gram counts
         self.SPARSE_COUNT = self.create_sparse_matrix()
 
         print("Calculate document frequency and total count...")
+        # Calculate the document frequency, modified document frequency, and total count for each n-gram
         (
             self.DOCUMENT_FREQUENCY,
-            self.DOCUMENT_FREQUENCY_MOD,
+            self.INVERSE_DOCUMENT_FREQUENCY_MODIFIER,
             self.DOCUMENT_TOTAL_COUNT,
         ) = self.calculate_document_counts()
 
     def calculate_document_counts(self):
+        # Convert the sparse matrix to COOrdinate format for efficient arithmetic and boolean operations
         sparse = self.SPARSE_COUNT.tocoo()
+
+        # Calculate the document frequency (df) for each term (n-gram) in the corpus.
+        # This is done by summing up the binary occurrences (0 or 1) of each term across all documents.
+        # The result is a 1D numpy array where each element corresponds to the document frequency of a term.
         df = np.asarray(np.sum(sparse > 0, axis=0)).flatten()
+
+        # Calculate the inverse document frequency modifier (df_m) for each term.
+        # This is done by taking the reciprocal of the document frequency.
+        # The result is a 1D numpy array where each element corresponds to the inverse document frequency of a term.
+        # Note: If there were any terms that did not appear in any document, their document frequency would be zero,
+        # and this line would cause a ZeroDivisionError. However, in this case, all terms that do not appear in any
+        # document have already been filtered out, so every term should have a document frequency greater than zero.
         df_m = 1 / df
+
+        # Calculate the total count (dtc) of each term in the corpus.
+        # This is done by summing up the actual counts of each term across all documents.
+        # The result is a 1D numpy array where each element corresponds to the total count of a term.
         dtc = np.asarray(np.sum(sparse, axis=0)).flatten()
+
+        # Return the document frequency, inverse document frequency, and total count arrays.
         return df, df_m, dtc
 
     def create_sparse_matrix(self):
@@ -184,58 +244,11 @@ class FastCorpusTokenizer:
         global numba_count_valid_ngrams
 
         @jit(nopython=True)
-        # def numba_count_valid_ngrams(data2d, allowed_ngram, word_to_ngram_indexes, allowed_per_col):
-        #     is_valid_ngram = np.ones(data2d.shape[0],dtype=np.bool_)
-        #     # First we do a quick filter for allowed words
-        #     for col in range(data2d.shape[1]):
-        #         is_valid_ngram = is_valid_ngram & allowed_per_col[:,col][data2d[:,col]]
-        #     data2d = data2d[is_valid_ngram,:]
-        #     found_ngram = np.ones(data2d.shape[0], np.uint32) * -1
-
-        #     for idx, row in enumerate(data2d):
-        #         start_index, end_index = word_to_ngram_indexes[row[0]]
-        #         end_index += 1
-        #         # print(start_index, ' ', end_index)
-        #         if start_index == -1:
-        #             continue
-        #         # Merged is always sorted. So, limiting range this way should work.
-
-        #         for col in range(1,allowed_ngram.shape[1]): # Start at col2, we know col1 matches
-        #             row_val = row[col]
-        #             col_vals = allowed_ngram[start_index:end_index,col] # get current matches
-        #             start = -1
-        #             end = -1
-
-        #             # First find start, if any
-        #             for i, val in enumerate(col_vals):
-        #                 if val == row_val:
-        #                     start = i + start_index
-        #                     break
-        #             # Not found at all, exit and continue with next ngram
-        #             if start == -1:
-        #                 start_index = -1
-        #                 break
-        #             # Find end
-        #             for i,val in enumerate(allowed_ngram[start:end_index+1,col]):
-        #                 if val != row_val:
-        #                     # Found the end
-        #                     end = start + i +1 # Verify this works
-        #                     break
-        #             start_index = start
-        #             if end != -1:
-        #                 end_index = end # Only change if end was found
-
-        #         if start_index != -1:
-        #             # if not np.all(allowed_ngram[start_index,:] == row):
-        #             #     print('error...')
-        #             #     print()
-        #             found_ngram[idx] = start_index
-        #     return found_ngram[found_ngram > -1]
         def numba_count_valid_ngrams(
             data2d, allowed_ngram, word_to_ngram_indexes, allowed_per_col
         ):
-            """Theoretically slightly less efficient than the previous version, although easier to read.
-
+            """
+            Comment:
             The inefficient part is the "np.where" part which the previous version attempted to
             perform more efficiently by stopping at the end, as we expect them to be continuous.
 
