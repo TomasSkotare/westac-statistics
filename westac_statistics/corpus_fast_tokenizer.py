@@ -36,7 +36,7 @@ class FastCorpusTokenizer:
     ALLOWED_COUNTER: np.array
     ALLOWED_PER_COL: np.array
     WORD_TO_NGRAM_INDEXES: np.array
-    SPARSE_COUNT: dok_matrix
+    NGRAM_SPARSE_COUNT: dok_matrix
     DOCUMENT_FREQUENCY: np.array
     INVERSE_DOCUMENT_FREQUENCY_MODIFIER: np.array
     DOCUMENT_TOTAL_COUNT: np.array
@@ -187,7 +187,7 @@ class FastCorpusTokenizer:
 
         print("Creating sparse matrix...")
         # Create a sparse matrix from the n-gram counts
-        self.SPARSE_COUNT = self.create_sparse_matrix()
+        self.NGRAM_SPARSE_COUNT = self.create_ngram_sparse_matrix()
 
         print("Calculate document frequency and total count...")
         # Calculate the document frequency, modified document frequency, and total count for each n-gram
@@ -199,7 +199,7 @@ class FastCorpusTokenizer:
 
     def calculate_document_counts(self):
         # Convert the sparse matrix to COOrdinate format for efficient arithmetic and boolean operations
-        sparse = self.SPARSE_COUNT.tocoo()
+        sparse = self.NGRAM_SPARSE_COUNT.tocoo()
 
         # Calculate the document frequency (df) for each term (n-gram) in the corpus.
         # This is done by summing up the binary occurrences (0 or 1) of each term across all documents.
@@ -222,7 +222,16 @@ class FastCorpusTokenizer:
         # Return the document frequency, inverse document frequency, and total count arrays.
         return df, df_m, dtc
 
-    def create_sparse_matrix(self):
+    def create_ngram_sparse_matrix(self):
+        """This creates a sparse matrix from the ngram counts.
+        
+        The size is (document_count, ngram_count).
+        
+        This can then be used to find out if a specific ngram exists in a specific document.
+
+        Returns: dok_matrix (scipy.sparse.dok_matrix): A sparse matrix containing the ngram counts.
+            
+        """
         uid_ngram_sparse = dok_matrix(
             (len(self.NGRAMS_PER_UID), len(self.ALLOWED_NGRAMS)), dtype=np.uint16
         ).tolil()
@@ -592,7 +601,7 @@ class FastCorpusTokenizer:
 
         weird_ngrams = np.where(
             np.asarray(
-                np.sum(self.SPARSE_COUNT, axis=0) < self.MINIMUM_NGRAM_COUNT
+                np.sum(self.NGRAM_SPARSE_COUNT, axis=0) < self.MINIMUM_NGRAM_COUNT
             ).flatten()
         )[0]
 
@@ -618,7 +627,7 @@ class FastCorpusTokenizer:
             print("---")
 
     def verity_sparse_matrix(self):
-        mat = self.SPARSE_COUNT
+        mat = self.NGRAM_SPARSE_COUNT
         # Get random row from mat:
         random_index = np.random.randint(0, mat.shape[0])
         print("Selected index ", random_index)
