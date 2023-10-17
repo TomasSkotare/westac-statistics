@@ -37,7 +37,19 @@ SPEECH_INDEX = cft.FastCorpusTokenizer.prepare_dataframe(SPEECH_INDEX)
 output_path = f'./output/{corpus_version}/'
 temporary_path = f'./output/{corpus_version}/temp/'
 
+
 # %%
+# Helper class in case it's needed
+def get_class_variables_info(obj):
+    data = []
+    for attr_name, attr_value in obj.__dict__.items():
+        length = len(attr_value) if isinstance(attr_value, (str, list, np.ndarray)) else None
+        value = attr_value if (length is None and isinstance(attr_value, (int, float))) else None
+        shape = attr_value.shape if isinstance(attr_value, np.ndarray) else None
+        data.append([attr_name, type(attr_value), length, value, shape])
+    df = pd.DataFrame(data, columns=['Variable Name', 'Variable Type', 'Variable Length', 'Value', 'Shape'])
+    return df
+
 
 # %%
 MD = lambda x: display(Markdown(x))
@@ -57,7 +69,7 @@ my_cft = cft.FastCorpusTokenizer(SPEECH_INDEX,threads = 24, stop_word_file='../r
 # %%
 ##Sanity check, should be 0!
 import numpy as np
-np.sum(np.asarray(np.sum(my_cft.SPARSE_COUNT,axis=0)).flatten() < my_cft.MINIMUM_NGRAM_COUNT)
+np.sum(np.asarray(np.sum(my_cft.NGRAM_SPARSE_COUNT,axis=0)).flatten() < my_cft.MINIMUM_NGRAM_COUNT)
 
 # %%
 # TF-IDF på endast 7-grams som börjar på ordet "att"
@@ -75,6 +87,7 @@ from westac_statistics import tf_idf_calculator as tfidf
 
 
 tfidf_calc = tfidf.TF_IDF_Calculator(my_cft)
+# This is where we decide the groups to split, i.e. party/decade.
 data = tfidf_calc.calculate_ngram_groups(['party_abbrev','decade'])
 
 # %%
@@ -86,13 +99,16 @@ data = tfidf_calc.calculate_ngram_groups(['party_abbrev','decade'])
 # data = tfidf_calc.calculate_ngram_groups(['party_abbrev','decade'], ngram_allowed_indexes=(start,end))
 
 # %%
+# %%time
 df_dict = tfidf_calc.group_data_to_dataframe(data)
+
+# %%
 
 # %%
 # %%time
 tfidf_calc.save_ngrams_to_excel(df_dict, output_path)
 
-# %%
+# %% jupyter={"source_hidden": true}
 # %%time
 MD("# TTR Calculations")
 ttr = my_cft.ttr_function()
