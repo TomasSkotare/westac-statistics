@@ -64,7 +64,16 @@ import importlib
 importlib.reload(cft)  
 from westac_statistics import corpus_fast_tokenizer as cft
 
-my_cft = cft.FastCorpusTokenizer(SPEECH_INDEX,threads = 24, stop_word_file='../reference_files/predetermined_stop_words.xlsx', minimum_ngram_count=10, regex_pattern=R"(?u)\b\w+\b") # We allow words of length 1!
+
+USE_STOP_WORDS = False
+
+if USE_STOP_WORDS:
+    stop_word_file = '../reference_files/predetermined_stop_words.xlsx'
+else:
+    stop_word_file = None
+
+my_cft = cft.FastCorpusTokenizer(SPEECH_INDEX,threads = 24, stop_word_file=stop_word_file, minimum_ngram_count=10, regex_pattern=R"(?u)\b\w+\b") # We allow words of length 1!
+
 
 # %%
 ##Sanity check, should be 0!
@@ -88,7 +97,7 @@ from westac_statistics import tf_idf_calculator as tfidf
 
 tfidf_calc = tfidf.TF_IDF_Calculator(my_cft)
 # This is where we decide the groups to split, i.e. party/decade.
-data = tfidf_calc.calculate_ngram_groups(['party_abbrev','decade'])
+data = tfidf_calc.calculate_ngram_groups(['decade'])
 
 # %%
 # THIS PARTS REMOVE ALL WORDS NGRAMS BUT THE ONES CONTAINING 'att' AT THE START
@@ -100,11 +109,11 @@ data = tfidf_calc.calculate_ngram_groups(['party_abbrev','decade'])
 
 # %%
 # %%time
-df_dict = tfidf_calc.group_data_to_dataframe(data)
+df_dict = tfidf_calc.group_data_to_dataframe(data, sort_by='raw_count')
 
 # %%
-# %%time
-tfidf_calc.save_ngrams_to_excel(df_dict, output_path)
+ngram_total_usage_per_group, ngram_used_in_group = tfidf_calc.count_group_usages(data)
+ngram_total_usage_per_group
 
 # %%
 # %%time

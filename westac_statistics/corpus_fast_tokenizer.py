@@ -146,7 +146,7 @@ class FastCorpusTokenizer:
             self.STOP_WORD_ARRAY = self.load_stop_words(stop_word_file)
         else:
             # If no stop word file is provided, initialize an array of zeros
-            self.STOP_WORD_ARRAY = np.zero(self.word_count, dtype=np.bool)
+            self.STOP_WORD_ARRAY = np.zeros(self.word_count, dtype=bool)
 
         # Count the n-grams in the corpus using multiple threads
         self.MERGED_NGRAMS, self.MERGED_COUNTER = self.threaded_ngram_counting(threads)
