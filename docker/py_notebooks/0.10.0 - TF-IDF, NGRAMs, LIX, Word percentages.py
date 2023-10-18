@@ -103,12 +103,10 @@ data = tfidf_calc.calculate_ngram_groups(['party_abbrev','decade'])
 df_dict = tfidf_calc.group_data_to_dataframe(data)
 
 # %%
-
-# %%
 # %%time
 tfidf_calc.save_ngrams_to_excel(df_dict, output_path)
 
-# %% jupyter={"source_hidden": true}
+# %%
 # %%time
 MD("# TTR Calculations")
 ttr = my_cft.ttr_function()
