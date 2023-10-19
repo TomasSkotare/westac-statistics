@@ -1,7 +1,7 @@
 
 [tool.poetry]
 name = "westac-statistics"
-version = "0.3.0"
+version = "0.4.0"
 description = "Python statistics package for WeStAc, and the Swedish parliamentary proceedings"
 authors = ["TomasSkotare <tomas.skotare@umu.se>"]
 repository = "https://github.com/TomasSkotare/westac-statistics"
