@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.15.1
+#       jupytext_version: 1.16.0
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -83,6 +83,7 @@ metadata.initialize()
 metadata.add_affiliation(parser.speech_dataframe)
 
 # %%
+MD('Sanity check to ensure the material has been loaded.')
 df = metadata.metadata['person']
 df[df.wiki_id == 'Q109828321']
 
@@ -99,6 +100,12 @@ df['year'] = df.date.apply(lambda x: x.year) # Add year (to make it easier to pl
 df.loc[df[df.party_abbrev.isna()].index, 'party_abbrev'] = '?' # Set 'nan' values to '?' instead
 SPEECH_INDEX = df
 SPEECH_INDEX.to_feather(f'output/{corpus_version_string}/speech_index_{corpus_version_string}.feather')
+
+# %%
+MD('## Save empty speeches to csv file, using ~ (tilde) as separator.')
+MD('Additionally, the top protocols with empty speeches are shown')
+parser.empty_speeches[['file_name','protocol','who_intro_id','who_intro']].to_csv(f'output/{corpus_version_string}/empty_speeches.csv',sep='~')
+parser.empty_speeches.protocol.value_counts().head(5)
 
 # %%
 MD('# Unknown party affiliation of known speakers per year')
@@ -473,7 +480,125 @@ px.bar(df.UnknownPercentage.map(lambda x: (100-x) ).rename('Known part'), labels
 
 # %%
 display(px.histogram(SPEECH_INDEX.n_tokens))
-display(SPEECH_INDEX[SPEECH_INDEX.n_tokens > 10000].sort_values(by='n_tokens',ascending=False).head(5))
+display(SPEECH_INDEX[SPEECH_INDEX.n_tokens > 10000].sort_values(by='n_tokens',ascending=False).head(10))
+
+# %%
+# with pd.option_context('display.max_colwidth', 1000):
+#     df = SPEECH_INDEX[SPEECH_INDEX.who_intro.apply(len) > 50].who_intro.to_frame()
+#     df['length'] = df.who_intro.str.len()
+#     df = df.sort_values(by='length',ascending=False)
+#     display(df.head(20))
+speech_lengths = SPEECH_INDEX.who_intro.str.len()
+long_speeches = speech_lengths > 200
+data = speech_lengths[long_speeches]
+df = SPEECH_INDEX[long_speeches].who_intro.str.len()
+fig = px.histogram(df)
+fig.update_xaxes(
+    range=[200, 600],
+    tickvals=list(range(200, 601, 100)),
+    tickangle=45,
+    title_text='Length'
+)
+MD('# Prominence of long introductions (>100 characters)')
+display(fig)
+display(px.line(SPEECH_INDEX[long_speeches].groupby('year').who.count()))
+SPEECH_INDEX[long_speeches][['file_name','who_intro_id','year','who_intro']].sort_values(by='year').to_excel(f'output/{corpus_version_string}/long_introductions.xlsx')
+                                                                                                          
+                                                                                                          
+                                                                                                          
+
+# %%
+import pandas as pd
+import plotly.graph_objects as go
+
+def plot_mean_std(df, year_col, value_col):
+    # Group by year and calculate mean and standard deviation
+    yearly_data = df.groupby(year_col)[value_col].agg(['mean', 'std'])
+
+    # Create line plot for mean values
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=yearly_data.index, 
+        y=yearly_data['mean'],
+        mode='lines',
+        name='mean',
+        line=dict(color='rgb(0,100,80)'),
+        hovertemplate = 
+            '<b>Year</b>: %{x}<br>'+
+            '<b>Mean</b>: %{y:.2f}<br>'+
+            '<b>Std Dev</b>: '+ yearly_data['std'].apply('{:.2f}'.format) +'<extra></extra>',
+    ))
+
+    # Add shaded area for standard deviation
+    fig.add_trace(go.Scatter(
+        x=yearly_data.index.tolist() + yearly_data.index.tolist()[::-1], 
+        y=(yearly_data['mean'] + yearly_data['std']).tolist() + (yearly_data['mean'] - yearly_data['std']).tolist()[::-1],
+        fill='toself',
+        fillcolor='rgba(0,100,80,0.2)',
+        line=dict(color='rgba(255,255,255,0)'),
+        hoverinfo="skip",
+        showlegend=False
+    ))
+
+    fig.update_layout(
+        title='Mean and Standard Deviation of Values per Year',
+        xaxis_title=year_col,
+        yaxis_title=value_col,
+    )
+
+    return fig
+
+def plot_quantiles(df, year_col, value_col, lower_quantile=0.25, upper_quantile=0.75):
+    # Group by year and calculate quantiles
+    yearly_data = df.groupby(year_col)[value_col].agg([lambda x: x.quantile(lower_quantile), 'median', lambda x: x.quantile(upper_quantile)])
+
+    yearly_data.columns = ['lower_quantile', 'median', 'upper_quantile']
+
+    # Create line plot for median values
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=yearly_data.index, 
+        y=yearly_data['median'],
+        mode='lines',
+        name='median',
+        line=dict(color='rgb(0,100,80)'),
+        hovertemplate = 
+        '<b>Year</b>: %{x}<br>'+
+        '<b>Median</b>: %{y:.2f}<br>'+
+        '<b>Lower Quantile</b>: '+ yearly_data['lower_quantile'].apply('{:.2f}'.format) +'<br>'+
+        '<b>Upper Quantile</b>: '+ yearly_data['upper_quantile'].apply('{:.2f}'.format) +'<extra></extra>',
+    ))
+
+    # Add shaded area for quantiles
+    fig.add_trace(go.Scatter(
+        x=yearly_data.index.tolist() + yearly_data.index.tolist()[::-1], 
+        y=yearly_data['upper_quantile'].tolist() + yearly_data['lower_quantile'].tolist()[::-1],
+        fill='toself',
+        fillcolor='rgba(0,100,80,0.2)',
+        line=dict(color='rgba(255,255,255,0)'),
+        hoverinfo="skip",
+        showlegend=False
+    ))
+
+    fig.update_layout(
+        title=f'Quantiles of Values per Year, lower quantile = {lower_quantile}, upper quantile = {upper_quantile}',
+        xaxis_title=year_col,
+        yaxis_title=value_col,
+
+    )
+
+    return fig
+
+
+df = SPEECH_INDEX[['who_intro','year']]
+df['Introduction_length'] = df.who_intro.str.len()
+MD('# Length of introduction by year, including standard deviation')
+display(plot_mean_std(df, 'year', 'Introduction_length'))
+display(plot_quantiles(df, 'year', 'Introduction_length', lower_quantile=0.25, upper_quantile=0.75))
+display(plot_quantiles(df, 'year', 'Introduction_length', lower_quantile=0.1, upper_quantile=0.9))
+
+
+# %%
 
 # %% [markdown]
 # # Average age of speakers per party and gender

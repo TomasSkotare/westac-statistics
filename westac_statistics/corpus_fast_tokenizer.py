@@ -1,3 +1,4 @@
+import os
 from multiprocessing import Pool
 
 import nltk
@@ -6,7 +7,9 @@ import pandas as pd
 from numba import jit
 from tqdm.auto import tqdm
 from scipy.sparse import dok_matrix
-from collections import Counter, defaultdict
+from collections import defaultdict
+from typing import Union, Optional
+
 
 
 class FastCorpusTokenizer:
@@ -32,7 +35,6 @@ class FastCorpusTokenizer:
     MERGED_NGRAMS: np.array
     MERGED_COUNTER: np.array
     MINIMUM_NGRAM_COUNT: int
-    ALLOWED_NGRAMS: np.array
     ALLOWED_COUNTER: np.array
     ALLOWED_PER_COL: np.array
     WORD_TO_NGRAM_INDEXES: np.array
@@ -74,14 +76,15 @@ class FastCorpusTokenizer:
         return SPEECH_INDEX
 
     def __init__(
-
         self,
-        SPEECH_INDEX: pd.DataFrame,  # A DataFrame containing the speech index
-        ngram_length=7,  # The length of the n-grams to be used, default is 7
-        threads: int = 24,  # The number of threads to be used for parallel processing, default is 24
-        stop_word_file: str = None,  # The file containing stop words, default is None
-        minimum_ngram_count: int = 10,  # The minimum count for an n-gram to be considered, default is 10
-        regex_pattern=R"(?u)\b\w\w+\b",  # The regex pattern to be used for word matching, default is any word of length 2 or more
+        SPEECH_INDEX: pd.DataFrame,
+        ngram_length=7,
+        threads: int = 24,            
+        stop_word_file: Union[
+            str, None
+        ] = None,
+        minimum_ngram_count: int = 10,
+        regex_pattern=R"(?u)\b\w\w+\b",
     ):
         """
         Initializes the instance with the given parameters and performs several preprocessing steps on the speech index.
@@ -106,7 +109,7 @@ class FastCorpusTokenizer:
         9. Creates a sparse matrix from the n-gram counts.
         10. Calculates the document frequency, modified document frequency, and total count for each n-gram.
         """
-        
+
         # Initialize instance variables
         self.SPEECH_INDEX = SPEECH_INDEX
         self.NGRAM_LENGTH = ngram_length
@@ -130,7 +133,7 @@ class FastCorpusTokenizer:
         start = pd.Timestamp.now()
         # Vectorize the documents using multiple threads
         self.VECTORIZED_DOCUMENTS, self.SUMMED_WORD_COUNTS = self.vectorize_documents(
-            threads=threads, pattern = self.REGEX_PATTERN
+            threads=threads, pattern=self.REGEX_PATTERN
         )
         # Create a DataFrame from the vectorized documents
         self.VECTORIZED_TEX_DF = pd.DataFrame(
@@ -158,7 +161,7 @@ class FastCorpusTokenizer:
         self.ALLOWED_COUNTER = self.MERGED_COUNTER[
             self.MERGED_COUNTER >= minimum_ngram_count
         ]
-        
+
         # Print the percentage of n-grams that are being kept based on the minimum count criteria
         print(
             f"Keeping {(self.ALLOWED_NGRAMS.shape[0] / self.MERGED_NGRAMS.shape[0]) * 100:.2f}% of ngrams."
@@ -224,13 +227,13 @@ class FastCorpusTokenizer:
 
     def create_ngram_sparse_matrix(self):
         """This creates a sparse matrix from the ngram counts.
-        
+
         The size is (document_count, ngram_count).
-        
+
         This can then be used to find out if a specific ngram exists in a specific document.
 
         Returns: dok_matrix (scipy.sparse.dok_matrix): A sparse matrix containing the ngram counts.
-            
+
         """
         uid_ngram_sparse = dok_matrix(
             (len(self.NGRAMS_PER_UID), len(self.ALLOWED_NGRAMS)), dtype=np.uint16
@@ -446,8 +449,8 @@ class FastCorpusTokenizer:
         with Pool(threads) as pool:
             results = pool.map(worker_fun, chunks)
             all_vectors = []
-            for d, word_counts in results:
-                all_vectors.extend(d)
+            for vector, word_counts in results:
+                all_vectors.extend(vector)
                 total_word_counts.append(word_counts)
         del worker_fun
 
@@ -498,25 +501,25 @@ class FastCorpusTokenizer:
         with Pool(threads) as pool:
             workers = pool.map_async(worker_fun, chunks)
             all_counters = []
-            for d in workers.get():
-                all_counters.append(d)
+            for counter_result in workers.get():
+                all_counters.append(counter_result)
         del worker_fun
 
         global is_sorted
         global merge_sorted_arrays
 
         @jit(nopython=True)
-        def is_sorted(a, b):
+        def is_sorted(one, two):
             """Checks if two arrays are sorted. Returns 1 if a is sorted before b, -1 if b is sorted before a, 0 if they are the same."""
-            for idx in range(len(a)):
-                if a[idx] < b[idx]:
+            for idx in range(len(one)):
+                if one[idx] < two[idx]:
                     return 1
-                if a[idx] > b[idx]:
+                if one[idx] > two[idx]:
                     return -1
             return 0
 
         @jit(nopython=True)
-        def merge_sorted_arrays(a, b, ac, bc):
+        def merge_sorted_arrays(a, b, ac, bc): #pylint: disable=invalid-name
             """Merge two sorted arrays into one sorted array."""
             if a.shape[1] != b.shape[1]:
                 raise ValueError("Error! Shapes not same!")
@@ -577,6 +580,7 @@ class FastCorpusTokenizer:
         return merged_ngram, merged_counter
 
     def verify_allowed_in_columns(self):
+        """Prints the percentage of allowed values in each column of a matrix."""
         for i, col in enumerate(
             np.sum(self.ALLOWED_PER_COL, axis=0) / self.ALLOWED_PER_COL.shape[0] * 100
         ):
@@ -626,7 +630,8 @@ class FastCorpusTokenizer:
                 print("Not found!")
             print("---")
 
-    def verity_sparse_matrix(self):
+    def verify_sparse_matrix(self):
+        """Verifies the presence of randomly selected n-grams in a sparse matrix."""
         mat = self.NGRAM_SPARSE_COUNT
         # Get random row from mat:
         random_index = np.random.randint(0, mat.shape[0])
@@ -651,18 +656,20 @@ class FastCorpusTokenizer:
     @staticmethod
     @jit(nopython=True)
     def _count_words(word_array, maximum_words):
+        """Counts the occurrence of each word in the given word array."""
         counted_words = np.zeros(maximum_words, dtype=np.uint32)
         for i in word_array:
             counted_words[i] += 1
         return counted_words
 
     def count_words_per_group(self, groupby_argument):
+        """Counts words for each group in a DataFrame grouped by a specified argument."""
         group_counts = {}
         for name, group in tqdm(self.SPEECH_INDEX.groupby(groupby_argument)):
             vectorized_text = np.concatenate(
                 self.VECTORIZED_TEX_DF.iloc[group.index].vectorized_text.values
             )
-            word_counts = self.__class__._count_words(vectorized_text, self.word_count)
+            word_counts = self._count_words(vectorized_text, self.word_count)
             group_counts[name] = word_counts
         return group_counts
 
@@ -749,25 +756,41 @@ class FastCorpusTokenizer:
 
     @staticmethod
     def word_use_cumulative_count(most_used: dict):
+        """
+        Calculates the cumulative word usage count for each group in the input 
+        dictionary.
+
+        Parameters:
+        most_used (dict): Dictionary containing word usage data for each group.
+
+        Returns:
+        dict: Dictionary with cumulative word usage count for each group.
+        """        
         group_cumulative_sums = {}
 
-        for k, v in most_used.items():
-            twc = v["top_words_count"]
-            tw = v["top_words"]
+        for key, value in most_used.items():
+            top_words_count = value["top_words_count"]
+            top_words = value["top_words"]
 
-            cumulative_percentage = (np.cumsum(twc) / v["group_total_words"]) * 100
-            group_cumulative_sums[k] = {
-                "Word": tw,
-                "Count": twc,
+            cumulative_percentage = (np.cumsum(top_words_count) / value["group_total_words"]) * 100
+            group_cumulative_sums[key] = {
+                "Word": top_words,
+                "Count": top_words_count,
                 "Cumulative percentage of group": cumulative_percentage,
             }
         return group_cumulative_sums
 
     @staticmethod
     def save_cumulative_sums_to_excel(group_cumulative_sums: dict, output_path: str):
+        """
+        Saves cumulative word usage sums to Excel files in the specified directory.
+
+        Parameters:
+        group_cumulative_sums (dict): Dictionary with cumulative word usage data.
+        output_path (str): Path to the directory where Excel files will be saved.
+        """        
         output_directory = f"{output_path}/word_lengths/"
         # Ensure that output_directory exists:
-        import os
 
         os.makedirs(output_directory, exist_ok=True)
         for name, group_data in group_cumulative_sums.items():
@@ -785,8 +808,8 @@ class FastCorpusTokenizer:
         returns: the count of words of the different lengths
         """
         word_length_counter = np.zeros(np.max(word_lengths), np.uint32)
-        for idx, c in enumerate(count):
-            word_length_counter[word_lengths[idx]] += c
+        for idx, _count in enumerate(count):
+            word_length_counter[word_lengths[idx]] += _count
         return word_length_counter
 
     def count_group_word_lengths(self, group_counts):
@@ -804,6 +827,10 @@ class FastCorpusTokenizer:
 
     @staticmethod
     def group_word_length_to_excel(group_word_lengths, output_directory: str):
+        """
+        Saves word length counts for each group to Excel files in a specified
+        directory.
+        """
         for name, group_lengths in group_word_lengths.items():
             party, year = name
             df = pd.DataFrame(
@@ -811,7 +838,6 @@ class FastCorpusTokenizer:
             )
             total_words = df.Count.sum()
             df["Percentage"] = 100 * df.Count / total_words
-            import os
 
             os.makedirs(f"{output_directory}/word_length_counts/", exist_ok=True)
             filename = f"{output_directory}/word_length_counts/{party}_{year}.xlsx"
@@ -827,8 +853,7 @@ class FastCorpusTokenizer:
         # TTR = (number of unique words / total number of words) x 100
         if count > 0:
             return (unique / count) * 100
-        else:
-            return -1
+        return -1
 
     def ttr_function(self, threads=24):
         """Using the vectorized text values, calculate the TTR for each speech
@@ -850,7 +875,7 @@ class FastCorpusTokenizer:
             ttr_results = np.zeros(len(chunk), dtype=np.float64)
             res = np.zeros(word_count, dtype=np.uint16)
             for i, text in enumerate(texts):
-                ttr_results[i] = self.__class__._calc_ttr(res, text)
+                ttr_results[i] = self._calc_ttr(res, text)
                 res[:] = 0
 
             return ttr_results

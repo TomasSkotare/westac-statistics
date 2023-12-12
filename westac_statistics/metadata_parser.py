@@ -1,3 +1,13 @@
+"""
+This module contains the `MetadataParser` class.
+
+The `MetadataParser` class is designed to parse the metadata available in a corpus. 
+It loads each metadata file into a pandas dataframe and stores it in a dictionary, 
+while also performing some preprocessing to ensure the data is in a usable format.
+
+Classes:
+    MetadataParser: Parses and preprocesses metadata from a corpus.
+"""
 import glob
 from pathlib import Path
 
@@ -9,11 +19,12 @@ from tqdm.auto import tqdm
 class MetadataParser:
     """
     This class is used to parse the metadata available in the corpus.
-    
+
     Each metadata file is loaded into a pandas dataframe, and stored in a dictionary.
-    
+
     In addition, some preprocessing is done to ensure that the data is in a usable format.
     """
+
     def __init__(self, metadata_directory: str):
         self.csv_files = list(
             glob.iglob(metadata_directory + "/**/*.csv", recursive=True)
@@ -21,6 +32,14 @@ class MetadataParser:
         self.metadata = {}
 
     def initialize(self):
+        """
+        Initializes metadata by loading CSV files and preprocessing 'party_affiliation'.
+
+        Iterates over CSV files, loads each into a DataFrame, and stores it in the
+        'metadata' dictionary with the file stem as the key. Converts 'start' and 'end'
+        columns of 'party_affiliation' data to datetime format. Calls private methods to
+        fix 'name' and 'person' metadata.
+        """
         for x in self.csv_files:
             self.metadata[Path(x).stem] = pd.read_csv(x)
         aff = self.metadata["party_affiliation"]
@@ -34,17 +53,18 @@ class MetadataParser:
     @staticmethod
     def get_closest_to_date(df, date):
         """This function returns the party that is closest to the specified date.
-        
+
         This is not a perfect solution, but it is the best we have for now.
 
         Args:
-            df (pandas.Dataframe): A dataframe with party affiliation data for a specific person
+            df (pandas.Dataframe): A dataframe with party affiliation data for a s
+                pecific person
             date: The date to look for, in a pandas datetime format
 
         Returns:
             _type_: _description_
         """
-        # These can crash in the case that *all* end or start dates are not a time, 
+        # These can crash in the case that *all* end or start dates are not a time,
         # just account for that
         try:
             start_closest = np.argmin((df.start_dt - date).abs())
@@ -63,12 +83,13 @@ class MetadataParser:
     def get_affiliation_from_dates(self, who, dates):
         """
         Gets affiliation from a dataframe.
-        This includes a "uncertain" flag, which specifies if the party affiliation is an approximation
-        or not.
-        note that "unknown" and "unknown missing" are two valid options that are not uncertain.
-        Uncertain values are when the specified date is not within the range of any specific start-stop date.
-        In such cases, we have decided that the closest start/stop date from the other options should decide,
-        and the uncertain flag is set to True.
+        This includes a "uncertain" flag, which specifies if the party affiliation is an
+        approximation or not.
+        note that "unknown" and "unknown missing" are two valid options that are not
+        uncertain. Uncertain values are when the specified date is not within the range
+        of any specific start-stop date. In such cases, we have decided that the closest
+        start/stop date from the other options should decide, and the uncertain flag
+        is set to True.
         """
         aff = self.metadata["party_affiliation"]
         if who == "unknown":
@@ -128,7 +149,7 @@ class MetadataParser:
     @staticmethod
     def join_on(df1, df2, column, delete_join=False):
         """This function joins two dataframes on a specific column.
-        
+
         If the number of rows changes, a warning is printed.
 
         Args:
@@ -148,8 +169,7 @@ class MetadataParser:
             )
         if delete_join:
             return df.drop(columns=column)
-        else:
-            return df
+        return df
 
     def __fix_name_metadata(self):
         names = self.metadata["name"]
@@ -219,7 +239,7 @@ class MetadataParser:
             if np.any(
                 df[name].apply(lambda x: len(np.unique(x))) == 0
             ):  # TEMPORARY WORKAROUND DUE TO MORE THAN ONE GUID
-                raise Exception(f"Unexpected {name}, verify!")
+                raise ValueError(f"Unexpected {name}, verify!")
             df[name] = df[name].apply(lambda x: x[0])
             return df
 
@@ -232,12 +252,12 @@ class MetadataParser:
     def add_affiliation(self, speech_dataframe):
         """
         This function adds party affiliation to each speech in the dataframe.
-        
+
         As the same speaker can have different party affiliations at different times,
         we attempt to find the correct party affiliation for each speech.
-        
+
         This is not a perfect solution, and some speeches will be marked as uncertain.
-        
+
         The reason for this is that some speakers have no party affiliation, and some have
         overlapping dates or missing dates.
         """
@@ -266,7 +286,48 @@ class MetadataParser:
                 speech_dataframe.loc[indexes, "party_affiliation"] = affil
                 speech_dataframe.loc[indexes, "party_affiliation_uncertain"] = uncertain
                 speech_dataframe.loc[indexes, "party_affiliation_message"] = message
-                
+
+    def add_affiliation_multithreaded(self, speech_dataframe):
+        """
+        Adds party affiliation to the speech dataframe in a multithreaded manner.
+
+        This function iterates over the dataframe grouped by 'who' and 'date', and
+        assigns party affiliation, uncertainty, and message for each group. If an
+        exception occurs during the affiliation assignment, it is raised and printed.
+
+        Parameters:
+        speech_dataframe (pandas.DataFrame): The dataframe to which party affiliation
+        is to be added.
+
+        Raises:
+        Exception: If an error occurs during the affiliation assignment.
+        """
+        speech_dataframe["party_affiliation"] = "unknown"
+        speech_dataframe[
+            "party_affiliation_uncertain"
+        ] = True  # Assume uncertain. Should always be set anyway.
+        speech_dataframe["party_affiliation_message"] = ""
+
+        for name, group in tqdm(speech_dataframe[["who", "date"]].groupby("who")):
+            date_grouping = (
+                group.reset_index()
+                .groupby("date")
+                .agg({"index": list})
+                .rename(columns={"index": "indexes"})
+            )
+            dates = date_grouping.index.values
+            try:
+                affiliation_per_date = self.get_affiliation_from_dates(name, dates)
+            except Exception as e:
+                print(f"Exception at {name}")
+                raise e
+            for idx, (affil, uncertain, message) in enumerate(affiliation_per_date):
+                indexes = date_grouping.iloc[idx].values[0]
+
+                speech_dataframe.loc[indexes, "party_affiliation"] = affil
+                speech_dataframe.loc[indexes, "party_affiliation_uncertain"] = uncertain
+                speech_dataframe.loc[indexes, "party_affiliation_message"] = message
+
     @staticmethod
     def find_rows_with_all_words(df, words):
         """
@@ -280,34 +341,31 @@ class MetadataParser:
         # Create a mask for rows that contain all words
         mask = df.apply(
             lambda row: all(
-                word in ' '.join(str(i) for i in row) if isinstance(row, list) 
-                else word in str(row).lower() 
+                word in " ".join(str(i) for i in row)
+                if isinstance(row, list)
+                else word in str(row).lower()
                 for word in words
-            ), 
-            axis=1
+            ),
+            axis=1,
         )
 
         # Return rows that contain all words
         return df[mask]
-
 
     def find_words_in_metadata(self, words):
         """
         This function iterates over all DataFrames in the metadata and uses the find_rows_with_all_words function
         to find and returns dataframes with rows where all words are found.
         """
-        
+
         dfs_containing_metata = {}
         # Iterate over all DataFrames in the metadata
         for name, df in self.metadata.items():
-            
             # Use the find_rows_with_all_words function to find and display the rows where all words are found
             df = self.__class__.find_rows_with_all_words(df, words)
-            
+
             # If any rows are found, add the DataFrame to the return_dfs dictionary
             if len(df) > 0:
                 dfs_containing_metata[name] = df
-                
-        return dfs_containing_metata
 
-        
+        return dfs_containing_metata

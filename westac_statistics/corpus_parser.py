@@ -1,8 +1,17 @@
+"""
+This module contains the `CorpusParser` class.
+
+The `CorpusParser` class is designed to parse a corpus and create a dataframe with the 
+speeches.
+
+Classes:
+    CorpusParser: This class parses the corpus and creates a dataframe with the speeches
+
+"""
 import glob
 import json
 import os
 
-# import sqlite3
 from multiprocessing import Pool
 
 import numpy as np
@@ -13,15 +22,16 @@ from nltk.tokenize import word_tokenize
 
 class CorpusParser:
     """This class is used to parse the corpus and create a dataframe with the speeches.
-    
-    This class uses multiprocessing to parse the corpus in parallel, as quickly as possible.
+
+    This class uses multiprocessing to parse the corpus in parallel, as quickly as 
+    possible.
     This can lead to a high memory usage, so be careful.
 
     Raises:
         Exception: If more than one speaker is detected in a sequence of utterances.
 
     Returns:
-        Either a pandas dataframe or a list of dictionaries, 
+        Either a pandas dataframe or a list of dictionaries,
         depending on the as_dataframe parameter.
     """
 
@@ -37,7 +47,34 @@ class CorpusParser:
 
     @staticmethod
     def get_speeches_from_soup(soup, as_dataframe=True):
-        # Find date
+        """
+        Extracts speeches from a BeautifulSoup object, which is expected to
+        represent a structured document.
+
+        Parameters:
+        soup (BeautifulSoup): A BeautifulSoup object representing the
+            structured document from which speeches are to be extracted.
+        as_dataframe (bool, optional): If True, the function returns a
+            pandas DataFrame. If False, it returns a list of dictionaries.
+            Default is True.
+
+        Returns:
+        pandas.DataFrame or list: If as_dataframe is True, returns a
+            DataFrame where each row represents a speech, with columns for
+            the speaker, date, protocol, number of tokens, and other
+            relevant information. If as_dataframe is False, returns a list
+            of dictionaries, where each dictionary contains the same
+            information for a single speech.
+
+        Raises:
+        Exception: If more than one speaker is detected in a single
+            utterance sequence.
+
+        Note:
+        The function is designed to work with a specific document
+            structure, and may not work as expected if the input
+            BeautifulSoup object does not conform to this structure.
+        """
         date = None
         try:
             date = pd.to_datetime(soup.find(lambda x: x.name == "docDate").text)
@@ -80,9 +117,9 @@ class CorpusParser:
             if first.name == "note":
                 who_intro_id = first["xml:id"]
                 who_intro = first.text.strip()
-            possible_who = set([x.get("who") for x in speech if x.name == "u"])
+            possible_who = {x.get("who") for x in speech if x.name == "u"}
             if len(possible_who) > 1:
-                raise Exception("More than one who detected in utterence sequence!")
+                raise ValueError("More than one who detected in utterence sequence!")
             if len(possible_who) == 1:
                 who = list(possible_who)[0]
             # Consider counting tokens here!
@@ -125,7 +162,7 @@ class CorpusParser:
 
     def perform_threaded_parsing(self, threads=26):
         """Perform threaded parsing of the corpus.
-        
+
         This uses the multiprocessing module to parse the corpus in parallel.
 
         Args:
@@ -134,12 +171,12 @@ class CorpusParser:
         Returns:
             _type_: A list of dataframes with the speeches
         """
-        with Pool(threads) as p:
-            return p.map(self._get_speakers_df_from_file, self.xml_files)
+        with Pool(threads) as pool:
+            return pool.map(self._get_speakers_df_from_file, self.xml_files)
 
     def read_speech_dataframe_from_disk(self):
         """Reads the speech dataframe from disk.
-        
+
         For this we use the feather format.
 
         Returns:
@@ -153,11 +190,12 @@ class CorpusParser:
         return df
 
     def initialize(self, threads=26, force_update=False):
-        """Initialize the corpus parser. This will parse the corpus and save the result to disk.
+        """Initialize the corpus parser. This will parse the corpus and save the result
+        to disk.
 
         Args:
             threads (int, optional): Number of threads to use. Defaults to 26.
-            force_update (bool, optional): Forces an update, even if the file 
+            force_update (bool, optional): Forces an update, even if the file
                     already exists. Defaults to False.
         """
         if not os.path.exists(self.database_file) or force_update:
