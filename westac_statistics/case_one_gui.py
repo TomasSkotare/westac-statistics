@@ -45,6 +45,7 @@ class CaseOneGUI:
         "SD": "#DDDD00",
         "V": "#DA291C",
         "NUD": "#222222",
+        "NYD": "#7F7F7F", # Gray is #7F7F7F
         "gov": "#7F7F7F",
         "partilös": "#D4D4D4",
         "lib": "#636363",

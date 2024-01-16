@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.15.1
+#       jupytext_version: 1.16.0
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -109,11 +109,14 @@ data = tfidf_calc.calculate_ngram_groups(['decade'])
 
 # %%
 # %%time
-df_dict = tfidf_calc.group_data_to_dataframe(data, sort_by='raw_count')
+df_dict = tfidf_calc.group_data_to_dataframe(data, sort_by='count_idf')
 
 # %%
-ngram_total_usage_per_group, ngram_used_in_group = tfidf_calc.count_group_usages(data)
-ngram_total_usage_per_group
+# df_dict
+
+# %%
+names_to_index, ngram_total_usage_per_group, ngram_used_in_group = tfidf_calc.count_group_usages(data)
+ngram_total_usage_per_group.shape
 
 # %%
 # %%time
@@ -198,6 +201,88 @@ def save_top_ttr_per_decade(my_cft, token_ranges = [(20,200), (201,500), (501, 1
             # with pd.ExcelWriter(f'TTR_Bottom_{top_bottom_count}_({_min}-{_max}_tokens).xlsx', engine='openpyxl', mode='w') as writer:
                 decade_data.tail(top_bottom_count).to_excel(writer,sheet_name=f'{decade}')        
 save_top_ttr_per_decade(my_cft)
+
+# %%
+# vi behöver en uppdaterad TTR-graf från dig baserat på version 0.10.0. Denna scatter plot-graf ska innehålla:
+#genomsnittlig TTR för fyra tallängdkategorier: 20–200 ord, 201–500 ord, 501–1000 ord och 1000+ ord
+#genomsnittlig TTR ska vara uträknad per decennium från 1920-talet till och med 2010-talet
+#bara för partierna C, KD, L, M, MP, NYD, S, SD och V. I tidigare versioner har vi även tagit bort partier benämnda som FRIS, X och ? men dessa ska nu tas bort
+#färgkoda partierna efter deras officiella partifärger (eller iaf så likt det går)
+#och ta gärna bort 2020-talet, det är bara fram till 2019 vi är intresserade av
+#använd grå färg för Nyd
+import plotly.io as pio
+import os
+from westac_statistics import case_one_gui
+importlib.reload(case_one_gui)  
+from westac_statistics import case_one_gui
+
+def resize_and_save_plotly_figure(fig, filename, output_types=['png', 'svg', 'html', 'pdf'], output_path='', width=None, height=None):
+    # Resize the figure
+    fig.layout.autosize = False
+    if width is not None:
+        fig.layout.width = width
+    if height is not None:
+        fig.layout.height = height
+
+    # Save the figure in the specified output types
+    for output_type in output_types:
+        if output_type in ['png', 'svg','pdf']:
+            pio.write_image(fig, os.path.join(output_path, f'{filename}.{output_type}'))
+        elif output_type == 'html':
+            fig.write_html(os.path.join(output_path, f'{filename}.html'))
+
+def ttr_per_decade_per_party_per_token_range(s_df, token_ranges = [(1,20,200), (2,201,500), (3,501, 1000), (4,1001, np.inf)], 
+                                             parties_to_include=None):
+    color_map = None
+    temp_df = s_df.copy()
+    temp_df = temp_df.rename(columns={'party_abbrev': 'Party', 'ttr':'TTR'})
+
+    # Strip parties that are not included
+    if parties_to_include is not None:
+        temp_df = temp_df[temp_df.Party.isin(parties_to_include.party_abbreviation)]
+        color_map = dict(zip(parties_to_include.party_abbreviation, parties_to_include.color))
+
+    temp_df['token_range'] = temp_df.n_tokens.apply(lambda x: next(iter([f'{n}: {a}-{b}' for n,a,b in token_ranges if ((x >= a) & (x <= b))]),'None'))
+    temp_df = temp_df[temp_df.token_range != 'None']
+    temp_df['decade'] = [f'{x}s' for x in temp_df.year.apply(lambda x: int(x / 10) * 10)]
+    temp_df = temp_df.groupby(['decade','Party','token_range']).agg({'TTR':'mean'})
+    fig = px.strip(temp_df.reset_index(), x='decade',y='TTR',color='Party',facet_col='token_range',height=800, 
+                   title='TTR per decade, split into party and different number of tokens in speech',
+                   color_discrete_map=color_map, 
+                   labels={
+                     "ttr":"TTR",
+                   },)
+    # A variant for updating the subplot titles
+    new_annotations = plt.layout.annotations
+    for a in range(len(token_ranges)):
+        i, start, stop = token_ranges[a]
+        new_annotations[a].text = f'Speech length = {start}-{stop} words'
+    fig.update_layout(annotations=new_annotations)
+    
+    fig.update_xaxes(tickangle=45, nticks=len(temp_df))
+    fig.update_layout(legend_title_text='Party')
+    return fig, temp_df
+
+
+color_df = pd.DataFrame(tuple(case_one_gui.CaseOneGUI.PARTY_COLORS_HEX.items()),columns=['party_abbreviation', 'color'])
+color_df.party_abbreviation = color_df.party_abbreviation.str.title()
+specified_set = {'C', 'Kd', 'L', 'M', 'Mp', 'Nyd', 'S', 'Sd', 'V'}
+color_df = color_df[color_df.party_abbreviation.isin(specified_set)]
+
+fig, temp_df = ttr_per_decade_per_party_per_token_range(my_cft.SPEECH_INDEX[my_cft.SPEECH_INDEX.decade < 2020], 
+                                                        parties_to_include=color_df)
+display(fig)
+# Now use the resize_and_save_plotly_figure function to save the figure
+resize_and_save_plotly_figure(fig, '2024_01_15-ttr_ranges_over_decades', output_types=['png', 'svg', 'html','pdf'], 
+                              output_path=output_path, width=1000, height=600)
+
+# color_df
+
+# %%
+pd.DataFrame(tuple(case_one_gui.CaseOneGUI.PARTY_COLORS_HEX.items()),columns=['party_abbreviation', 'color'])
+
+# %%
+my_cft.SPEECH_INDEX.party_abbrev.unique()
 
 # %%
 # %%time
@@ -445,4 +530,25 @@ with custom_format('{:.0f}'.format):
 MD('Mean TTR per decade')
 df.groupby('decade').ttr.mean().to_frame()
 
+
 # %%
+#En annan grej som du skulle kunna hjälpa oss med: ta fram topp 1000 listor med de vanligaste längst orden (definierat som ord som innehåller minst 16 tecken) för varje decennium
+#Behöver inte vara fördelat på parti
+
+def get_top_words(output_path, top_number=1000, min_word_length=16):
+    for name, df in SPEECH_INDEX.groupby('decade'):
+        word_count = np.zeros(my_cft.word_count, dtype=np.uint32)
+        words = my_cft.VECTORIZED_TEX_DF.iloc[df.index]
+        for text in words.vectorized_text:
+            np.add.at(word_count, text, 1)
+        word_count[my_cft.WORD_LENGTH < min_word_length] = 0
+        top_indices = np.argsort(word_count)[::-1][:top_number]
+        top_df = pd.DataFrame({'Word': [my_cft.INDEX_TO_WORD[x] for x in top_indices], 'Count': word_count[top_indices]})
+        top_df.to_excel(f'{output_path}/{name}s_top_{top_number}_words.xlsx')
+    
+get_top_words(output_path, top_number=1000, min_word_length=16)
+
+# %%
+
+# %%
+my_cft.

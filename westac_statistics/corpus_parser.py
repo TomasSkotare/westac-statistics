@@ -18,7 +18,7 @@ import numpy as np
 import pandas as pd
 from bs4 import BeautifulSoup
 from nltk.tokenize import word_tokenize
-
+import json
 
 class CorpusParser:
     """This class is used to parse the corpus and create a dataframe with the speeches.
@@ -99,6 +99,7 @@ class CorpusParser:
 
         speeches = []
         current_speech = []
+        all_errors = []
         for x in tags:
             if x.name == "note":
                 if len(current_speech) > 0:
@@ -119,7 +120,13 @@ class CorpusParser:
                 who_intro = first.text.strip()
             possible_who = {x.get("who") for x in speech if x.name == "u"}
             if len(possible_who) > 1:
-                raise ValueError("More than one who detected in utterence sequence!")
+                # print("More than one who detected in utterence sequence! (number:", len(possible_who), ")")
+                # print(possible_who)
+                # print(speech)
+                # NOTE ! ! ! ! THIS IS A TEMPORARY WORKAROUND AND SHOULD NOT REMAIN IN THE CODE
+                all_errors.append((protocol,possible_who,speech))
+                possible_who = set(list(possible_who)[0])
+                # raise ValueError("More than one who detected in utterence sequence!")
             if len(possible_who) == 1:
                 who = list(possible_who)[0]
             # Consider counting tokens here!
@@ -140,8 +147,8 @@ class CorpusParser:
                 }
             )
         if as_dataframe:
-            return pd.DataFrame(all_speeches)
-        return all_speeches
+            return pd.DataFrame(all_speeches), all_errors
+        return all_speeches, all_errors
 
     @staticmethod
     def _get_speakers_df_from_file(xml_file):
@@ -156,8 +163,29 @@ class CorpusParser:
         with open(xml_file, encoding="utf-8") as open_file:
             text = open_file.read()
             soup = BeautifulSoup(text, features="xml")
-            df = CorpusParser.get_speeches_from_soup(soup)
+            try:
+                df, errors = CorpusParser.get_speeches_from_soup(soup)
+            except Exception as e: # noqa
+                print(f"Error in file {xml_file}")
+                # Print error messagE:
+                error_message = str(e)
+                print(error_message)
+                raise e
             df["file_name"] = xml_file
+        if len(errors) > 0:
+            
+            def save_to_json(data, filename):
+                # Convert list of tuples to list of dictionaries
+                dict_data = []
+                for protocol, possible_who, speech in data:
+                    # Convert each Tag object in speech to string and join them
+                    speech_str = ' '.join(tag.get_text() for tag in speech)
+                    dict_data.append({'protocol': protocol, 'possible_who': list(possible_who), 'speech': speech_str})
+                
+                # Write to JSON file
+                with open(filename, 'w') as f:
+                    json.dump(dict_data, f)
+            save_to_json(errors, f'{os.path.basename(xml_file)}_multiple_who_errors.json')            
         return df
 
     def perform_threaded_parsing(self, threads=26):

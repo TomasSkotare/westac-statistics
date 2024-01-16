@@ -44,8 +44,9 @@ from IPython.display import display
 
 import plotly.express as px
 
-corpus_version_string = "0.10.0"
+corpus_version_string = "0.12.0"
 corpus_tag = f'v{corpus_version_string}'
+
 output_path = f'./output/{corpus_version_string}/'
 Path(output_path).mkdir(parents=True, exist_ok=True)
 
@@ -80,6 +81,8 @@ if repo.current_tag != corpus_tag:
 
 parser = corpus_parser.CorpusParser(corpus_location, f'{output_path}/corpus_db_{corpus_version_string}.feather')
 parser.initialize(force_update=False) # Todo: Will this work on a new corpus? Possible this needs to be manually set to True once...
+
+# %%
 
 # %%
 from importlib import reload
@@ -185,6 +188,11 @@ df = SPEECH_INDEX.groupby('protocol').date.unique().apply(lambda x: x[0]).value_
 fig = px.bar(df)
 fig.update_xaxes(type='category')
 fig.show()
+
+# %%
+df = SPEECH_INDEX.groupby('date').protocol.unique().to_frame()
+df.protocol = df.protocol.apply(lambda x: len(x))
+df.sort_values(by='protocol',ascending=False)
 
 # %% [markdown]
 # # Party colors, verify!
