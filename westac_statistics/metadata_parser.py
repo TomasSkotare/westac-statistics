@@ -46,6 +46,7 @@ class MetadataParser:
         aff["start_dt"] = aff.start.apply(pd.to_datetime)
         aff["end_dt"] = aff.end.apply(pd.to_datetime)
         self.metadata["party_affiliation"] = aff
+        self.id_column = "wiki_id" if 'wiki_id' in self.metadata["person"].columns else "swerik_id"
 
         self.__fix_name_metadata()
         self.__fix_person_metadata()
@@ -94,7 +95,7 @@ class MetadataParser:
         aff = self.metadata["party_affiliation"]
         if who == "unknown":
             return [("unknown", False, "Unknown person") for x in range(len(dates))]
-        df = aff[aff.wiki_id == who]
+        df = aff[aff[self.id_column] == who]
         if len(df) == 0:
             # print(f"{who} has no entry in party_affiliation!")
             return [("unknown_missing", False, "No listing") for x in range(len(dates))]
@@ -173,17 +174,17 @@ class MetadataParser:
 
     def __fix_name_metadata(self):
         names = self.metadata["name"]
-        # Sort, keeping primary name first
-        names = names.sort_values(by=["wiki_id", "primary_name"], ascending=False)
-        primary_names = names[["wiki_id", "name"]].drop_duplicates(
-            subset="wiki_id", ignore_index=True, keep="first"
+        names = names.sort_values(by=[self.id_column, "primary_name"], ascending=False)
+                        
+        primary_names = names[[self.id_column, "name"]].drop_duplicates(
+            subset=self.id_column, ignore_index=True, keep="first"
         )
-        all_names = names.groupby("wiki_id").agg({"name": list})
+        all_names = names.groupby(self.id_column).agg({"name": list})
 
         combined_names = self.join_on(
             primary_names,
             all_names.rename(columns={"name": "alternative_names"}).reset_index(),
-            column="wiki_id",
+            column=self.id_column,
         )
 
         self.metadata["name"] = combined_names
@@ -221,7 +222,9 @@ class MetadataParser:
         df.born = df.born.astype(str)
         df.dead = df.dead.astype(str)
 
-        df_g = df.groupby("wiki_id").agg(list)
+        id_column = self.id_column
+
+        df_g = df.groupby(id_column).agg(list)
 
         df_g.born = df_g.born.apply(
             lambda x: sorted(x, key=len, reverse=False)[0]
