@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.16.0
+#       jupytext_version: 1.16.1
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -253,7 +253,7 @@ def ttr_per_decade_per_party_per_token_range(s_df, token_ranges = [(1,20,200), (
                      "ttr":"TTR",
                    },)
     # A variant for updating the subplot titles
-    new_annotations = plt.layout.annotations
+    # new_annotations = plt.layout.annotations
     for a in range(len(token_ranges)):
         i, start, stop = token_ranges[a]
         new_annotations[a].text = f'Speech length = {start}-{stop} words'

@@ -1,4 +1,4 @@
 [BASIC]
 
 # A comma-separated list of names that should always be considered valid.
-good-names=df,x
+good-names=df,x,e,i,n
