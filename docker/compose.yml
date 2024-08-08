@@ -2,6 +2,9 @@ version: '3'
 services:
   jupyter:
     image: jupyter/datascience-notebook:r-4.3.1
+    container_name: westac_statistics
+    environment:
+      - JUPYTER_TOKEN=westac_tomas_pass_letsgo
     volumes:
       - ./mounts:/home/jovyan/work
       - ./scripts:/home/jovyan/scripts
@@ -20,3 +23,13 @@ services:
                start-notebook.sh"
     ports:
       - 9006:8888
+    networks:
+      westac-network:
+        ipv4_address: 10.125.0.5
+
+networks:
+  westac-network:
+    ipam:
+      driver: default
+      config:
+        - subnet: 10.125.0.0/16

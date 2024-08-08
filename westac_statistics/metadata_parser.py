@@ -46,7 +46,11 @@ class MetadataParser:
         aff["start_dt"] = aff.start.apply(pd.to_datetime)
         aff["end_dt"] = aff.end.apply(pd.to_datetime)
         self.metadata["party_affiliation"] = aff
-        self.id_column = "wiki_id" if 'wiki_id' in self.metadata["person"].columns else "swerik_id"
+        name_order = ['wiki_id', 'swerik_id', 'person_id']
+        
+        self.id_column = next((name for name in name_order if name in self.metadata["person"].columns), None)
+        if self.id_column is None:
+            raise ValueError(f"Could not find any of the id columns in {name_order} in the person metadata")
 
         self.__fix_name_metadata()
         self.__fix_person_metadata()

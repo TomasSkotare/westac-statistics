@@ -31,7 +31,7 @@ from westac_statistics import corpus_fast_tokenizer as cft
 import pandas as pd
 from IPython.display import display, Markdown, Image
 
-corpus_version = '0.10.0'
+corpus_version = 'v2024.06.19'
 SPEECH_INDEX = pd.read_feather(f'./output/{corpus_version}/speech_index_{corpus_version}.feather')
 SPEECH_INDEX = cft.FastCorpusTokenizer.prepare_dataframe(SPEECH_INDEX)
 output_path = f'./output/{corpus_version}/'

@@ -23,11 +23,39 @@ from IPython.display import Markdown
 MD = lambda x: display(Markdown(x))
 
 # %%
+import os
 import sys
-sys.path.append('../') # To allow for import of westac_statistics
+
+def add_to_sys_path(dir_name):
+    # Get the current working directory
+    cwd = os.getcwd()
+
+    while True:
+        dir_path = os.path.join(cwd, dir_name)
+
+        # Check if the directory exists and is not empty
+        if os.path.isdir(dir_path) and os.listdir(dir_path):
+            sys.path.append(dir_path)
+            print(f"Added {dir_path} to sys.path")
+            break
+        else:
+            # Get the parent directory
+            parent_dir = os.path.dirname(cwd)
+
+            # If we've reached the root directory, stop searching
+            if parent_dir == cwd:
+                print("Reached the root directory, suitable directory not found.")
+                break
+
+            # Otherwise, set the current directory to the parent and repeat
+            cwd = parent_dir
+            
+    add_to_sys_path('westac_statistics')
+
+
+# %%
 
 from dataclasses import dataclass
-from westac_statistics.case_one_gui import CaseOneGUI
 
 # %load_ext autoreload
 # %autoreload 2
@@ -44,8 +72,14 @@ from IPython.display import display
 
 import plotly.express as px
 
-corpus_version_string = "0.10.0"
+#The complete version is described in: https://github.com/swerik-project/the-swedish-parliament-corpus
+corpus_version_string = 'v2024.06.19'
+pyriksdagen_version = 'v1.2.0'
+persons_tag =  'v1.1.0'
+records_tag = 'v1.1.0'
+
 corpus_tag = f'v{corpus_version_string}'
+
 output_path = f'./output/{corpus_version_string}/'
 Path(output_path).mkdir(parents=True, exist_ok=True)
 
@@ -62,21 +96,54 @@ nltk.download('punkt')
 nltk.download('averaged_perceptron_tagger')
 
 # %%
-# %%time
+import os
+import sys
+
+def add_to_sys_path(dir_name):
+    # Get the current working directory
+    cwd = os.getcwd()
+    print(cwd)
+
+    while True:
+        dir_path = os.path.join(cwd, dir_name)
+        # Check if the directory exists and is not empty
+        if os.path.isdir(dir_path) and os.listdir(dir_path):
+            sys.path.append(cwd)
+            print(f"Added {cwd} to sys.path")
+            break
+        else:
+            # Get the parent directory
+            parent_dir = os.path.dirname(cwd)
+
+            # If we've reached the root directory, stop searching
+            if parent_dir == cwd:
+                print("Reached the root directory, suitable directory not found.")
+                break
+
+            # Otherwise, set the current directory to the parent and repeat
+            cwd = parent_dir
+            
+add_to_sys_path('westac_statistics')
+
+# %%
+# # %%time
 from importlib import reload
 from westac_statistics import corpus_parser,  case_one_gui
 reload(corpus_parser)
-from westac_statistics import corpus_parser
+from westac_statistics import corpus_parser 
 from westac_statistics.git_repository import GitRepo 
 
-corpus_location = '../riksdagen-corpus/corpus/protocols/'
+corpus_location = '../riksdagen_corpus_release/corpus/'
 
-repo = GitRepo(corpus_location)
-repo.check_and_clone('https://github.com/welfare-state-analytics/riksdagen-corpus.git',clone=False)
+records_repo = GitRepo(corpus_location, create_if_not_exists=True)
+records_repo.check_and_clone('https://github.com/swerik-project/riksdagen-records/',clone=True)
 
-if repo.current_tag != corpus_tag:
+if records_repo.current_tag != records_tag:
     print('Incorrect corpus tag, switching...')
-    repo.switch_to_tag(corpus_tag)
+    print('Possible tags:')
+    for tag in records_repo.tags:
+        print(tag)  
+    records_repo.switch_to_tag(records_tag)    
 
 parser = corpus_parser.CorpusParser(corpus_location, f'{output_path}/corpus_db_{corpus_version_string}.feather')
 parser.initialize(force_update=False) # Todo: Will this work on a new corpus? Possible this needs to be manually set to True once...
@@ -87,7 +154,21 @@ from westac_statistics import metadata_parser
 reload(metadata_parser)
 from westac_statistics import metadata_parser
 
-metadata = metadata_parser.MetadataParser('../riksdagen-corpus/corpus/metadata/')
+persons_location = '../riksdagen_corpus_release/persons/'
+
+persons_repo = GitRepo(persons_location, create_if_not_exists=True)
+persons_repo.check_and_clone('https://github.com/swerik-project/riksdagen-persons/',clone=True)
+
+if persons_repo.current_tag != persons_tag:
+    print('Incorrect corpus tag, switching...')
+    print('Possible tags:')
+    for tag in persons_repo.tags:
+        print(tag)  
+    persons_repo.switch_to_tag(records_tag)    
+else:
+    print('Correct tag')
+
+metadata = metadata_parser.MetadataParser(os.path.join(persons_location,'data'))
 metadata.initialize()
 
 # %%
@@ -96,13 +177,15 @@ metadata.add_affiliation(parser.speech_dataframe)
 # %%
 MD('Sanity check to ensure the material has been loaded.')
 df = metadata.metadata['person']
-df[df.wiki_id == 'Q109828321']
+
+df[df[metadata.id_column] == 'i-14itFAMq9exF2LvnaCtHAn']
 
 # %%
+person_id = metadata.id_column
 df = metadata.join_on(parser.speech_dataframe, metadata.metadata['party_abbreviation'].rename(columns={'party':'party_affiliation'}),column='party_affiliation') 
 df.abbreviation = df.abbreviation.str.capitalize()
-df = metadata.join_on(df, metadata.metadata['name'].rename(columns={'wiki_id':'who'}), column='who')
-df = metadata.join_on(df, metadata.metadata['person'].rename(columns={'wiki_id':'who'}), column='who')
+df = metadata.join_on(df, metadata.metadata['name'].rename(columns={person_id:'who'}), column='who')
+df = metadata.join_on(df, metadata.metadata['person'].rename(columns={person_id:'who'}), column='who')
 df = df.rename(columns={'abbreviation':'party_abbrev'})
 
 df.loc[df[df.gender.isna()].index,'gender'] = 'unknown' # Set gender to 'unknown' instead of np.nan
@@ -111,17 +194,6 @@ df['year'] = df.date.apply(lambda x: x.year) # Add year (to make it easier to pl
 df.loc[df[df.party_abbrev.isna()].index, 'party_abbrev'] = '?' # Set 'nan' values to '?' instead
 SPEECH_INDEX = df
 SPEECH_INDEX.to_feather(f'output/{corpus_version_string}/speech_index_{corpus_version_string}.feather')
-
-# %%
-import importlib
-import westac_statistics
-importlib.reload(westac_statistics)
-from westac_statistics.dataframe_optimizer import DataFrameOptimizer
-print('Before:', SPEECH_INDEX.memory_usage(deep=True).sum() / 1024 ** 3)
-
-
-SPEECH_INDEX = DataFrameOptimizer.optimize_dataframe(SPEECH_INDEX)
-print('After:', SPEECH_INDEX.memory_usage(deep=True).sum() / 1024 ** 3)
 
 # %%
 MD('## Save empty speeches to csv file, using ~ (tilde) as separator.')
@@ -135,29 +207,29 @@ speech = SPEECH_INDEX[SPEECH_INDEX.party_affiliation == 'unknown_missing']
 px.line(speech.groupby(['year']).who.unique().apply(len))
 
 # %%
-# MD('# Temporary list of checking for members of parliament who has no party after 1920')
-# df = pd.read_csv('https://raw.githubusercontent.com/welfare-state-analytics/riksdagen-corpus/dev/input/matching/member_of_parliament.csv')
-# members_who_have_party_defined_at_least_once = df[~df.party.isna()].wiki_id.unique()
-# # Strip people who have a defined party at least once!
-# df = df[~df.wiki_id.isin(members_who_have_party_defined_at_least_once)]
-# df.start = df.start.apply(metadata.convert_date)
-# df.end = df.end.apply(metadata.convert_date)
-# df['start_year'] = df.start.apply(lambda x: x.year)
-# df['end_year'] = df.end.apply(lambda x: x.year)
-# df2 = df[(df.start_year >= 1920) & (df.end_year >= 1920)].groupby('wiki_id').party.agg(list).apply(np.unique).to_frame()
-# df3 = df2[df2.party.apply(len) == 1].party.apply(lambda x: x[0]).isna()
-# unknown_ids = df3[df3 == True].index.values
-# def remove_duplicates(df):
-#     for col in df.columns:
-#         df[col] = df[col].apply(lambda x: pd.Series(x).drop_duplicates().tolist() if isinstance(x, list) else x)
-#         df[col] = df[col].apply(lambda x: np.nan if (isinstance(x, list) and not x) else x)
-#     return df
-# complete_df = remove_duplicates(df[df.wiki_id.isin(unknown_ids)].sort_values(by='wiki_id').groupby('wiki_id').agg(list))
-# for col in complete_df.columns:
-#     complete_df[col] = [x[0] if len(x) == 1 else x for x in complete_df[col]]
+MD('# Temporary list of checking for members of parliament who has no party after 1920')
+df = pd.read_csv('https://raw.githubusercontent.com/welfare-state-analytics/riksdagen-corpus/dev/input/matching/member_of_parliament.csv')
+members_who_have_party_defined_at_least_once = df[~df.party.isna()][metadata.id_column].unique()
+# Strip people who have a defined party at least once!
+df = df[~df[metadata.id_column].isin(members_who_have_party_defined_at_least_once)]
+df.start = df.start.apply(metadata.convert_date)
+df.end = df.end.apply(metadata.convert_date)
+df['start_year'] = df.start.apply(lambda x: x.year)
+df['end_year'] = df.end.apply(lambda x: x.year)
+df2 = df[(df.start_year >= 1920) & (df.end_year >= 1920)].groupby(metadata.id_column).party.agg(list).apply(np.unique).to_frame()
+df3 = df2[df2.party.apply(len) == 1].party.apply(lambda x: x[0]).isna()
+unknown_ids = df3[df3 == True].index.values
+def remove_duplicates(df):
+    for col in df.columns:
+        df[col] = df[col].apply(lambda x: pd.Series(x).drop_duplicates().tolist() if isinstance(x, list) else x)
+        df[col] = df[col].apply(lambda x: np.nan if (isinstance(x, list) and not x) else x)
+    return df
+complete_df = remove_duplicates(df[df.swerik_id.isin(unknown_ids)].sort_values(by=metadata.id_column).groupby(metadata.id_column).agg(list))
+for col in complete_df.columns:
+    complete_df[col] = [x[0] if len(x) == 1 else x for x in complete_df[col]]
    
-# complete_df.to_excel('input_member_of_parliament_by_missing_party.xlsx')
-# complete_df
+complete_df.to_excel('input_member_of_parliament_by_missing_party.xlsx')
+complete_df
 
 # %% [markdown]
 # # Known people, who have no party in party_affiliation.csv
@@ -174,13 +246,13 @@ display(df.head(10))
 
 # %%
 df = metadata.metadata['member_of_parliament']
-MD(f'# Number of members of parliament missing either start or end date: {len(df[(df.end.isna() | df.start.isna())].wiki_id.unique())}')
+MD(f'# Number of members of parliament missing either start or end date: {len(df[(df.end.isna() | df.start.isna())][metadata.id_column].unique())}')
 df = df[~df.end.isna()]
 
 df.end = df.end.apply(metadata.convert_date)
 members_ending_after_1920 = df[df.end.apply(lambda x: x.year) >= 1920]
 display(members_ending_after_1920)
-who_ending_after_1920 = members_ending_after_1920.wiki_id.unique()
+who_ending_after_1920 = members_ending_after_1920[metadata.id_column].unique()
 df = SPEECH_INDEX[(SPEECH_INDEX.party_affiliation == 'unknown_missing') | (SPEECH_INDEX.party_affiliation == 'unknown')]
 # fancy join to include name...
 MD('## People included in members_of_parliament who quit after 1920, and are also of unknown party affiliation')
@@ -196,6 +268,11 @@ df = SPEECH_INDEX.groupby('protocol').date.unique().apply(lambda x: x[0]).value_
 fig = px.bar(df)
 fig.update_xaxes(type='category')
 fig.show()
+
+# %%
+df = SPEECH_INDEX.groupby('date').protocol.unique().to_frame()
+df.protocol = df.protocol.apply(lambda x: len(x))
+df.sort_values(by='protocol',ascending=False)
 
 # %% [markdown]
 # # Party colors, verify!
@@ -222,16 +299,6 @@ df.sort_values(by='count',ascending=False)
 # # Most common unknown speaker introductions (in decending order)
 
 # %%
-# %%time
-df = pd.DataFrame(SPEECH_INDEX[(SPEECH_INDEX.who == 'unknown')])
-print('Before:', df.memory_usage(deep=True).sum() / 1024 ** 3)
-df['who_intro'] = df.who_intro.astype('str')
-print('After:', df.memory_usage(deep=True).sum() / 1024 ** 3)
-
-df.groupby('who_intro',sort=False).agg(list)
-
-
-# %%
 df = pd.DataFrame(SPEECH_INDEX[(SPEECH_INDEX.who == 'unknown')]).groupby('who_intro').agg(list)
 
 def _get_year_range_string(years):
@@ -254,13 +321,13 @@ import plotly.express as px
 df = metadata.metadata['person']
 # display(df)
 # px.bar(df.groupby('gender').count(), barmode='group')
-fig = px.bar(df.groupby('gender').count()[['wiki_id', 'dead', 'riksdagen_id']],
+fig = px.bar(df.groupby('gender').count()[[metadata.id_column, 'dead', 'riksdagen_id']],
        height=600,
        barmode='group', 
        labels={'gender':'Kön','value':'Antal','variable':'Datapunkt'},
             title='Översikt')
 # print(fig)
-translate = {'wiki_id':'Totalt antal', 'dead':'Avlidna', 'riksdagen_id':'Antal i riksdagen'}
+translate = {metadata.id_column:'Totalt antal', 'dead':'Avlidna', 'riksdagen_id':'Antal i riksdagen'}
 fig.for_each_trace(lambda t: t.update(name = translate[t.name],
                                       legendgroup = translate[t.name],
                                       hovertemplate = t.hovertemplate.replace(t.name, translate[t.name])
@@ -276,7 +343,7 @@ unique_roles = sorted(df.role.unique())
 
 df = df.join(metadata.metadata['person'], lsuffix='_left', rsuffix='_right')
 df = df.drop(columns=[x for x in df.columns if x.endswith('_right')])
-df2 = pd.DataFrame(df.groupby(['role','gender']).nunique()['wiki_id_left'])
+df2 = pd.DataFrame(df.groupby(['role','gender']).nunique()[metadata.id_column+'_left'])
 df2 = df2.unstack(level=1)
 df2.columns = [y for x, y in df2.columns.to_flat_index()]
 # px.bar(df2,barmode='group',height=600)
@@ -293,7 +360,7 @@ unique_roles = sorted(df.role.unique())
 
 df = df.join(metadata.metadata['person'], lsuffix='_left', rsuffix='_right')
 df = df.drop(columns=[x for x in df.columns if x.endswith('_right')])
-df2 = pd.DataFrame(df.groupby(['role','gender']).nunique()['wiki_id_left'])
+df2 = pd.DataFrame(df.groupby(['role','gender']).nunique()[metadata.id_column+'_left'])
 df2 = df2.unstack(level=1)
 df2.columns = [y for x, y in df2.columns.to_flat_index()]
 # px.bar(df2,barmode='group',height=600)
@@ -308,8 +375,8 @@ unique_roles = sorted(df.role.unique())
 # Most common minister roles... Changed most often?
 # display(df.groupby(df.role).count().sort_values(by='person_id', ascending=False).head(10))
 
-df = df.merge(metadata.metadata['person'], on='wiki_id')
-df2 = pd.DataFrame(df.groupby(['role','gender']).nunique()['wiki_id'])
+df = df.merge(metadata.metadata['person'], on=metadata.id_column)
+df2 = pd.DataFrame(df.groupby(['role','gender']).nunique()[metadata.id_column])
 df2 = df2.unstack(level=1)
 df2.columns = [y for x, y in df2.columns.to_flat_index()]
 # px.bar(df2,barmode='group',height=600)
@@ -837,11 +904,11 @@ SPEECH_INDEX.groupby(['year']).u_id.count().to_excel(f'./output/{corpus_version_
 
 # %%
 df = metadata.metadata['party_affiliation']
-df = metadata.join_on(df, pd.DataFrame(df.groupby('wiki_id').party.count()).reset_index().rename(columns={'party':'party_count'}), column='wiki_id')
+df = metadata.join_on(df, pd.DataFrame(df.groupby(metadata.id_column).party.count()).reset_index().rename(columns={'party':'party_count'}), column=metadata.id_column)
 ids = []
-for name, group in df[(df.party_count >= 2)].groupby('wiki_id'):
+for name, group in df[(df.party_count >= 2)].groupby(metadata.id_column):
     if len(group.start_dt.unique()) == 1 and len(group.end_dt.unique()) == 1:
-        ids.extend(group.wiki_id.unique())
+        ids.extend(group[metadata.id_column].unique())
 undefined_timespan_ids = set(ids)
 
 # %%
@@ -862,7 +929,7 @@ df.loc[df[df.end_dt.isnull()].index, 'end_dt'] =np.datetime64('today')
 first_date = df.start_dt.sort_values().values[0]
 df.loc[df[df.start_dt.isnull()].index, 'start_dt'] = first_date
 df2 = df
-df2['overlap'] = (df2.groupby('wiki_id')
+df2['overlap'] = (df2.groupby(metadata.id_column)
                        .apply(lambda x: (x['end_dt'].shift() - x['start_dt']) > pd.Timedelta(0))
                        .reset_index(level=0, drop=True))
 
@@ -874,17 +941,16 @@ def different_party_overlap(dataframe):
     return False
 
 total_dataframes = []
-for id, count in df2[df2.overlap == True].wiki_id.value_counts().items():
-    tmp = df2[df2.wiki_id == id]
+for id, count in df2[df2.overlap == True][metadata.id_column].value_counts().items():
+    tmp = df2[df2[metadata.id_column] == id]
     if tmp.party.nunique() == 1:
         continue
     # if not different_party_overlap(tmp):
     #     continue
-    total_dataframes.append(df2[df2.wiki_id == id])
-    # display(df2[df2.wiki_id == id])
+    total_dataframes.append(df2[df2[metadata.id_column] == id])
 overlap_affiliations = pd.concat(total_dataframes)
 overlap_affiliations.to_excel(f'./output/{corpus_version_string}/metadata_party_affiliations_overlap.xlsx')
-overlapping_ids = set(overlap_affiliations.wiki_id.values)
+overlapping_ids = set(overlap_affiliations[metadata.id_column].values)
 SPEECH_INDEX[SPEECH_INDEX.who.isin(overlapping_ids)].who.value_counts().head(20)
 
 # %%
@@ -892,7 +958,7 @@ SPEECH_INDEX[SPEECH_INDEX.who.isin(overlapping_ids)].who.value_counts().head(20)
 import portion as P    
 from functools import reduce
 from tqdm.auto import tqdm
-# dataframe = df2[df2.wiki_id == 'Q271468']
+# dataframe = df2[df2.swerik_id == 'Q271468']
 # # display(dataframe)
 # # dataframe = dataframe.drop(index = 1068)
 # # dataframe = dataframe.drop(index = 1067)
@@ -924,7 +990,7 @@ def check_overlap_for_user(id, user_df):
             if a.overlaps(b):
                 intersect = a.intersection(b)
                 overlap.append(
-                    {'wiki_id':id,
+                    {metadata.id_column:id,
                      'Overlap start':intersect.lower,
                      'Overlap end':intersect.upper,
                      'Party 1':parties[i],
@@ -939,7 +1005,7 @@ def check_overlap_for_user(id, user_df):
             
 # df = metadata.metadata['party_affiliation']    
 all_overlap = []
-for id, group in tqdm(df.groupby('wiki_id')):
+for id, group in tqdm(df.groupby(metadata.id_column)):
     all_overlap.extend(check_overlap_for_user(id, group))
 df2 = pd.DataFrame(all_overlap)
 
@@ -957,30 +1023,13 @@ with pd.option_context('display.max_rows', None, 'display.max_columns', None):
 
 # %%
 import plotly.figure_factory as ff
-
-def visualize_overlap(df, wiki_id):
-    # Filter DataFrame by wiki_id
-    df_filtered = df[df.wiki_id == wiki_id]
-    print('Earliest: ', df_filtered['start_dt'].min())
-    display(df_filtered['start_dt'])
-
-    # Ensure start_dt and end_dt are not NaT
-    df_filtered['start_dt'] = df_filtered['start_dt'].fillna(df_filtered['start_dt'].min())
-    df_filtered['end_dt'] = df_filtered['end_dt'].fillna(df_filtered['end_dt'].max())
-
-    # Display filtered DataFrame
-    display(df_filtered)
-
-    # Create Gantt chart
-    df_gantt = df_filtered[['party','start_dt','end_dt']]
-    df_gantt.columns = ['Task','Start','Finish']
-    fig = ff.create_gantt(df_gantt)
-
-    return fig
-
-fig = visualize_overlap(metadata.metadata['party_affiliation'], 'Q3369258')
-fig.show()
-
+MD('# Overlap visualization... Remove?')
+display(df2[df2[metadata.id_column] == 'i-HKCBHNaesqPFHjWMxwcBN4'])
+df3 = metadata.metadata['party_affiliation']
+display(df3[df3[metadata.id_column] == 'i-HKCBHNaesqPFHjWMxwcBN4'])
+df4 = df3[df3[metadata.id_column] == 'i-HKCBHNaesqPFHjWMxwcBN4'][['party','start_dt','end_dt']]
+df4.columns = ['Task','Start','Finish']
+ff.create_gantt(df4)
 
 # %% [markdown]
 #
@@ -1034,7 +1083,6 @@ for h, repeats in df.hash.value_counts().items():
 with pd.option_context('display.max_rows', None, 'display.max_columns', None, 'max_colwidth', 200):
     display(pd.DataFrame(new_df_list).head(20))    
 
-
 # %% [markdown]
 # Hej Tomas! Johan och jag har diskuterat några funktioner som vi skulle vilja att du tar fram gällande riksdagstalens längd.
 #
@@ -1047,55 +1095,31 @@ with pd.option_context('display.max_rows', None, 'display.max_columns', None, 'm
 # Vi skulle kunna dela in alla tal i tre längdkategorier: tal med upp till 200 ord, tal med 201–500 ord samt tal med mer än 500 ord. Det vi alltså vill ha då är (A.) en trendgraf som visar hur många tal per år som är mellan 1–200 ord, liksom för 201–500 ord och 501+ ord. Vi vill också (B.) se hur många procent som en viss tallängdkategori utgör av det totala antalet tal per decennium (blir nog lättast).
 
 # %%
-# import pandas as pd
-# SPEECH_INDEX = pd.read_feather(f'output/{corpus_version_string}/speech_index_{corpus_version_string}.feather')
+df = SPEECH_INDEX[SPEECH_INDEX.n_tokens < 10000]
+df['decade'] = df.year.apply(lambda x: int(x/10) * 10)
 
-# %%
-class SpeechLengthOverTime:
-    def __init__(self, df, output_path):
-        self.df = df[df.n_tokens < 10000].copy()
-        self.output_path = output_path
-        self.token_ranges = [(20,200), (201,500), (501, 1000), (1001, np.inf)]
-        self.convert_table = {'1001-inf':4, '20-200':0, '201-500':2, '501-1000':3}
+token_ranges = [(20,200), (201,500), (501, 1000), (1001, np.inf)]
+convert_table = {'1001-inf':4, '20-200':0, '201-500':2, '501-1000':3}
 
-    def preprocess(self):
-        self.df['decade'] = self.df.year.apply(lambda x: int(x/10) * 10)
-        self.df['token_range'] = self.df.n_tokens.apply(
-            lambda x: next(iter([f'{a}-{b}' for a,b in self.token_ranges if ((x >= a) & (x <= b))]),'None')
-        )
-        self.df = self.df.drop(self.df[self.df.token_range == 'None'].index)
+df['token_range'] = df.n_tokens.apply(lambda x: next(iter([f'{a}-{b}' for a,b in token_ranges if ((x >= a) & (x <= b))]),'None'))
+df = df.drop(df[df.token_range == 'None'].index)
 
-    def analyze(self):
-        decade = self.df.groupby(['year', 'token_range']).count()['who'].rename('count')
-        df2 = decade.reset_index()
-        df2.to_excel(f'{self.output_path}/speech_count_per_token_count_per_year.xlsx')
-        df2['order'] = df2.token_range.apply(lambda x: self.convert_table[x])
-        df2 = df2.sort_values(by=['year','order'])
-        display(px.line(df2, x='year', y='count', color='token_range'))
 
-        df3 = self.df.groupby(['year','token_range']).count()['who'].rename('count').reset_index()
-        df3['normalized_count'] = df3['count'] / df3.groupby('year')['count'].transform('sum')
-        df3.to_excel(f'{self.output_path}/speech_normalized_count_per_token_range_per_year.xlsx')
-        df3['order'] = df3.token_range.apply(lambda x: self.convert_table[x])
-        df3 = df3.sort_values(by='order')
-        display(px.area(df3, x='year', y='normalized_count', color='token_range'))
+decade = df.groupby(['year','token_range']).count()['who'].rename('count')
 
-        df4 = self.df.groupby(['year', 'token_range', 'gender', 'party_abbrev']).count()['who'].rename('count').reset_index()
-        df4['normalized_count'] = df4['count'] / df4.groupby(['year', 'gender', 'party_abbrev'])['count'].transform('sum')
-        df4.to_excel(f'{self.output_path}/speech_normalized_count_per_token_range_per_year_party_gender.xlsx')
+df2 = decade.reset_index()
+# px.bar(df2, x='year', y='count', color='token_range',barmode='group')
+df2.to_excel(f'{output_path}/speech_count_per_token_count_per_year.xlsx')
+df2['order'] = df2.token_range.apply(lambda x: convert_table[x])
+df2 = df2.sort_values(by=['year','order'])
+display(px.line(df2, x='year', y='count', color='token_range'))
 
-        df5 = self.df.groupby(['year','party_abbrev', 'token_range']).count()['who'].rename('count').reset_index()
-        df5['normalized_count'] = df5['count'] / df5.groupby(['year','party_abbrev'])['count'].transform('sum')
-        df5.to_excel(f'{self.output_path}/speech_normalized_count_per_token_range_per_year_and_party.xlsx')
-
-    def run(self):
-        self.preprocess()
-        self.analyze()
-
-analysis = SpeechLengthOverTime(SPEECH_INDEX, output_path)
-analysis.run()
-
-# %%
+df3 = df.groupby(['year','token_range']).count()['who'].rename('count').reset_index()
+df3['normalized_count'] = df3['count'] / df3.groupby('year')['count'].transform('sum')
+df3.to_excel(f'{output_path}/speech_normalized_count_per_token_range_per_year.xlsx')
+df3['order'] = df3.token_range.apply(lambda x: convert_table[x])
+df3 = df3.sort_values(by='order')
+display(px.area(df3, x='year', y='normalized_count', color='token_range'))
 
 # %%
 MD('# BELOW THIS, WE HAVE TEMPORARY TESTS; IGNORE')
@@ -1145,10 +1169,10 @@ df_html = filtered_df.sort_values(by='start').to_html()
 
 
 # HTML(f'<div style="max-height: 1000px; overflow: auto;">{df_html}</div>')
-check_values(metadata.metadata['party_affiliation'], 'wiki_id', filtered_df.wiki_id.values).party.value_counts()
+check_values(metadata.metadata['party_affiliation'], metadata.id_column, filtered_df[metadata.id_column].values).party.value_counts()
 
 # %%
-tst1 = check_values(metadata.metadata['party_affiliation'], 'wiki_id', filtered_df.wiki_id.values).groupby('wiki_id')['party'].agg('unique').to_frame()
+tst1 = check_values(metadata.metadata['party_affiliation'], 'swerik_id', filtered_df.swerik_id.values).groupby('swerik_id')['party'].agg('unique').to_frame()
 tst1
 tst1['party_count'] = tst1.party.apply(len)
 for who in tst1[tst1.party_count > 1].index.values:
@@ -1170,26 +1194,10 @@ df.party_affiliation.value_counts()
 tst1.party.value_counts()
 
 # %%
-check_values(metadata.metadata['party_affiliation'], 'wiki_id', filtered_df.wiki_id.values).groupby('wiki_id').party.agg('unique')
+check_values(metadata.metadata['party_affiliation'], 'swerik_id', filtered_df.swerik_id.values).groupby('swerik_id').party.agg('unique')
 
 # %%
-check_values(metadata.metadata['party_affiliation'], 'wiki_id', filtered_df.wiki_id.values).wiki_id.value_counts()
-
-# %%
-
-
-
-# %%
-
-# %%
-
-# %%
-
-# %%
-
-# %%
-
-# %%
+check_values(metadata.metadata['party_affiliation'], 'swerik_id', filtered_df.swerik_id.values).swerik_id.value_counts()
 
 # %%
 metadata.metadata['party_affiliation'].head(5).to_csv()
@@ -1231,210 +1239,12 @@ for name, df in metadata.find_words_in_metadata(words = ['Robert','Johansson']).
 ###### I den absoluta listan ska inte stoppordlistan användas!
 
 # %%
-#Gällande talens medellängd över tid – kan du ta fram medellängden för tal fördelat på S-män/S-kvinnor, M-män/M-kvinnor, V-män/V-kvinnor… osv?
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-import seaborn as sns
-
-def plot_average_length(df, output_file = None):
-    # Ensure the date is in datetime format
-    df['date'] = pd.to_datetime(df['date'])
-
-    # Extract the year from the date
-    df['year'] = df['date'].dt.year
-
-    # Group by year, party_abbrev, and gender, then calculate the mean n_tokens
-    grouped = df.groupby(['year', 'party_abbrev', 'gender'])['n_tokens'].mean().reset_index()
-
-    # Get the unique parties
-    parties = grouped['party_abbrev'].drop_duplicates()
-    
-    # Find the maximum value across all your data
-    max_value = grouped['n_tokens'].max()
-    
-    # Get the unique genders and assign a distinct color to each
-    genders = df.gender.unique()
-    colors = sns.color_palette('colorblind', len(genders)).as_hex()  # generates a list of distinct colors
-
-    # Create a dictionary mapping each gender to a color
-    gender_color_dict = dict(zip(genders, colors))
-
-    # Create a subplot for each party
-    fig = make_subplots(rows=len(parties), cols=1, shared_xaxes=True, vertical_spacing=0.01)
-
-    # For each party, create a line plot for each gender
-    for i, party in enumerate(parties, start=1):
-        for gender in genders:
-            data = grouped[(grouped['party_abbrev'] == party) & (grouped['gender'] == gender)]
-            if not data.empty:
-                fig.add_trace(go.Scatter(x=data['year'], y=data['n_tokens'], mode='lines', name=f"{gender}", line=dict(color=gender_color_dict[gender]), showlegend=(i==1)), row=i, col=1)
-        fig.update_yaxes(title_text=party, row=i, col=1, range=[0, max_value])
-
-    fig.update_layout(height=100*len(parties), title_text='Average Number of Tokens Over Time by Party and Gender', hovermode='x unified')
-    fig.update_xaxes(matches='x')
-    fig.show()
-
-    if output_file:
-        grouped.to_excel(output_file)
-    
-plot_average_length(SPEECH_INDEX, output_file=f'{output_path}/average_tokens_by_party_and_gender.xlsx')
-
+df = SPEECH_INDEX
+df = df[df.year < 1921]
+list(df[df.who == 'unknown'].head(10).file_name)
 
 # %%
-# %%time
-import shutil
-
-def create_text_files_and_zip(df, base_directory, start_date=None, end_date=None):
-    # Convert dates to datetime if they are not None
-    if start_date is not None:
-        start_date = pd.to_datetime(start_date)
-    if end_date is not None:
-        end_date = pd.to_datetime(end_date)
-
-    # Filter DataFrame based on date range if start_date and end_date are not None
-    if start_date is not None and end_date is not None:
-        mask = (df['date'] >= start_date) & (df['date'] <= end_date)
-        df = df.loc[mask]
-
-    for name, group in df.groupby('party_abbrev'):
-        # Create a directory for each name
-        directory = os.path.join(base_directory, name)
-        os.makedirs(directory, exist_ok=True)
-
-        # For each row in the group, create a text file
-        for index, row in group.iterrows():
-            # Create a filename based on the date and 'who' column
-            filename = f"{row['date'].strftime('%Y-%m-%d')}_{row['who']}_{row['who_intro']}.txt"
-            filepath = os.path.join(directory, filename)
-
-            # Write the contents of the 'text' column to the file
-            with open(filepath, 'w') as file:
-                file.write(str('\n\n'.join(row['text'])))
-
-    # Create a zip file of the base directory
-    shutil.make_archive(base_directory, 'zip', base_directory)
-
-
-# Fredrik wanted some data for test purposes, so this writes some text files from the corpus. 
-# If need be, recreate them later by oncommenting
-    
-# BASE_DIRECTORY = os.path.join(output_path, 'speeches_by_party')
-# start_date = '2021-09-10'
-# end_date = '2022-09-11'
-# create_text_files_and_zip(SPEECH_INDEX, BASE_DIRECTORY, start_date, end_date)
-
-# %%
-# %%time
-import re
-import plotly.io as pio
-import plotly.express as px
-from tqdm.auto import tqdm
 import pandas as pd
-from multiprocessing import Pool
+corpus_version = '0.14.0'
+SPEECH_INDEX = pd.read_feather(f'./output/{corpus_version}/speech_index_{corpus_version}.feather')
 
-class TextAnalysis:
-    def __init__(self, df, threads=1):
-        self.df = df.copy()
-        self.yearly_data = None
-        self.fig = None
-        self.regex = r"(?<!\w\.\w.)(?<![A-Z][a-z]\.)(?<=\.|\?)\s"
-        self.threads = threads
-        tqdm.pandas()
-
-    def count_sentences(self, text):
-        
-        pattern = re.compile(self.regex)
-        merged_text = ' '.join(text)
-        comma_count = merged_text.count(',')
-        dash_count = merged_text.count(' - ')
-        semicolon_count = merged_text.count(';')
-        sentences = pattern.split(merged_text)
-        sentence_count = len(sentences)
-        return sentence_count, comma_count, dash_count, semicolon_count
-
-    def threaded_count_sentences(self):
-        global worker_fun
-
-        def worker_fun(texts):
-            worker_result = []
-            for i, text in enumerate(self.df.text.values[texts]):
-                merged_text = ' '.join(text)
-                pattern = re.compile(self.regex)                
-                comma_count = merged_text.count(',')
-                dash_count = merged_text.count(' - ')
-                semicolon_count = merged_text.count(';')
-                sentences = pattern.split(merged_text)
-                sentence_count = len(sentences)                
-                worker_result.append((sentence_count, comma_count, dash_count, semicolon_count))
-            return worker_result
-
-        chunks = np.array_split(range(len(self.df)), self.threads)
-        with Pool(self.threads) as pool:
-            all_results = pool.map(worker_fun, chunks)
-
-        del worker_fun
-
-        # Flatten all_results into a single list of tuples
-        merged_results = [item for sublist in all_results for item in sublist]
-
-        return merged_results
-
-    def calculate_avg_tokens(self):
-        if self.threads > 1:
-            counts = pd.Series(self.threaded_count_sentences(), index=self.df.index)
-        else:
-            counts = self.df.text.progress_apply(self.count_sentences)
-        self.df[['sentence_count', 'comma_count', 'dash_count', 'semicolon_count']] = pd.DataFrame(counts.tolist(), index=self.df.index)
-        self.yearly_data = self.df.groupby('year').agg({'n_tokens': 'sum', 'sentence_count': 'sum', 'comma_count':'sum', 'dash_count':'sum', 'semicolon_count':'sum'})
-        self.yearly_data['avg_tokens_per_sentence'] = self.yearly_data['n_tokens'] / self.yearly_data['sentence_count']
-        self.yearly_data['avg_tokens_per_comma'] = self.yearly_data['n_tokens'] / self.yearly_data['comma_count']
-        self.yearly_data['avg_tokens_per_dash'] = self.yearly_data['n_tokens'] / self.yearly_data['dash_count']
-        self.yearly_data['avg_tokens_per_semicolon'] = self.yearly_data['n_tokens'] / self.yearly_data['semicolon_count']
-        self.yearly_data['total_dividers'] = self.yearly_data['comma_count'] + self.yearly_data['dash_count'] + self.yearly_data['semicolon_count']
-        self.yearly_data['avg_tokens_per_divider'] = self.yearly_data['n_tokens'] / self.yearly_data['total_dividers']
-        
-
-    @property
-    def figure(self):
-        if self.yearly_data is None:
-            self.calculate_avg_tokens()
-        self.fig = px.line(self.yearly_data, title='Average Tokens per Sentence, Comma, Dash, and Semicolon Over Years')
-        self.fig.update_yaxes(title_text='Count')
-        return self.fig
-
-    def save_figure(self, output_path, corpus_tag):
-        if self.fig is None:
-            self.figure
-        pio.write_html(self.fig, os.path.join(output_path,f'{corpus_tag}_average_tokens_per_sentence_comma_dash_semicolon.html'))
-
-
-analysis = TextAnalysis(SPEECH_INDEX, threads=16)
-analysis.calculate_avg_tokens()
-fig = analysis.figure
-analysis.save_figure(output_path, corpus_tag)
-analysis.yearly_data.to_excel(os.path.join(output_path,f'{corpus_tag}_sentence_analysis_mt.xlsx'))
-fig
-
-
-# %%
-def get_speeches_per_party_and_decade(df, filename=None):
-    # Create a copy of the dataframe to avoid modifying the original
-    df_copy = df.copy()
-
-    # Create a new column for the decade
-    df_copy['decade'] = (df_copy['date'].dt.year//10)*10
-
-    # Pivot the dataframe to get the count of party_abbreviation by decade
-    result_df = df_copy.groupby(['decade', 'party_abbrev']).size().unstack().fillna(0)
-
-    # If a filename is provided, save the result to an Excel file
-    if filename:
-        result_df.to_excel(filename)
-
-    return result_df
-
-get_speeches_per_party_and_decade(SPEECH_INDEX, os.path.join(output_path, f'{corpus_version_string}_no_speeches_per_party_and_decade.xlsx'))
-
-# %%
-
-# %%

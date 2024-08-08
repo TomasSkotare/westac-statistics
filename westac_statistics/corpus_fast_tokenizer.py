@@ -376,14 +376,14 @@ class FastCorpusTokenizer:
             data2d = data2d[allowed_per_col[data2d[:, col], col]]
         return data2d
 
-    def load_stop_words(self, stop_word_file):
+    def load_stop_words(self, stop_word_file, column_name="Stoppord"):
         df = pd.read_excel(stop_word_file, header=None)
         convert_dict = self.CONVERT_DICT
 
-        df.columns = ["Stoppord"]
+        df.columns = [column_name]
         stop_words = [
             convert_dict[x]
-            for x in df.Stoppord.values
+            for x in df[column_name].values
             if convert_dict.get(x, None) is not None
         ]
         # stop_set = set(stop_words)

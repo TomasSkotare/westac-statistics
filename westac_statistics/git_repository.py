@@ -26,14 +26,32 @@ class GitRepo:
         Checks if the repository is from a specific GitLab link and clones the repository if the directory does not exist or is empty.
     """
 
-    def __init__(self, path):
+    def __init__(self, path, create_if_not_exists=False):
         """
         Parameters
         ----------
         path : str
             The local path of the git repository
+        create_if_not_exists : bool, optional
+            If True, the directory will be created if it doesn't exist,
+            as long as the parent directory exists. Default is False.
         """
-        self.path = path
+        self.path = os.path.abspath(path)
+
+        # Check if the directory exists
+        if not os.path.isdir(self.path):
+            if create_if_not_exists:
+                parent_dir = os.path.dirname(self.path)
+
+                # Check if the parent directory exists
+                if os.path.isdir(parent_dir):
+                    # Create the directory
+                    os.mkdir(self.path)
+                    print(f"Created directory {self.path}")
+                else:
+                    raise FileNotFoundError(f"Cannot create directory {self.path} because its parent directory does not exist")
+            else:
+                raise FileNotFoundError(f"Directory {self.path} does not exist")
 
     @property
     def tags(self):
