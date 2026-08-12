@@ -1,7 +1,6 @@
-
 [tool.poetry]
 name = "westac-statistics"
-version = "0.4.0"
+version = "2.0.0"
 description = "Python statistics package for WeStAc, and the Swedish parliamentary proceedings"
 authors = ["TomasSkotare <tomas.skotare@umu.se>"]
 repository = "https://github.com/TomasSkotare/westac-statistics"
@@ -9,18 +8,27 @@ license = "MIT"
 readme = "README.md"
 packages = [{include = "westac_statistics"}]
 
-
 [tool.poetry.dependencies]
-python = "==3.11.*"
-numpy = "*"
-scipy = "*"
-pandas = "*"
-tqdm = "*"
-numba = "*"
-plotly = "*"
-bs4 = "*"
-nltk = "*"
+python = ">=3.11,<3.13"
+numpy = "^1.26"
+scipy = "^1.11"
+pandas = "^2.1"
+tqdm = "^4.66"
+numba = "^0.59"
+plotly = "^5.18"
+bs4 = "^0.0.2"
+nltk = "^3.8"
+lxml = "^5.1"
+pyarrow = "^15.0"
+openpyxl = "^3.1"
+loguru = "^0.7"
+ipywidgets = "^8.1"
+matplotlib = "^3.8"
+pyriksdagen = "^1.10"
+pyparlaclarin = "^0.9"
 
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0"
 
 [build-system]
 requires = ["poetry-core"]

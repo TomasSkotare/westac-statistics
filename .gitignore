@@ -1,5 +1,6 @@
 dist/*
-riksdagens_corpus/*
+.venv/
+riksdagen_corpus/*
 docker/mounts/*
 westac_statistics/__pycache__/*
 docker/scripts/.ipynb_checkpoints/*
