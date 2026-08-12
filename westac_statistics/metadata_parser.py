@@ -223,22 +223,30 @@ class MetadataParser:
 
     def __fix_person_metadata(self):
         df = self.metadata["person"]
-        df.born = df.born.astype(str)
-        df.dead = df.dead.astype(str)
+        # Fill NaN before astype(str) — astype(str) doesn't convert float NaN
+        # in object dtype columns
+        df.born = df.born.fillna("nan").astype(str)
+        df.dead = df.dead.fillna("nan").astype(str)
 
         id_column = self.id_column
 
         df_g = df.groupby(id_column).agg(list)
 
-        df_g.born = df_g.born.apply(
-            lambda x: sorted(x, key=len, reverse=False)[0]
-        )  # Get longest possible date
-        df_g.born = df_g.born.apply(self.convert_date)
+        def _pick_longest_date(lst):
+            valid = [v for v in lst if v not in ("nan", "None", "")]
+            if not valid:
+                return "nan"
+            return sorted(valid, key=len, reverse=True)[0]
 
+        df_g.born = df_g.born.apply(_pick_longest_date)
+        df_g.born = df_g.born.apply(
+            lambda x: pd.NaT if x == "nan" else self.convert_date(x)
+        )
+
+        df_g.dead = df_g.dead.apply(_pick_longest_date)
         df_g.dead = df_g.dead.apply(
-            lambda x: sorted(x, key=len, reverse=False)[0]
-        )  # Get longest possible date
-        df_g.dead = df_g.dead.apply(self.convert_date)
+            lambda x: pd.NaT if x == "nan" else self.convert_date(x)
+        )
 
         # This ensures that there is no instance where a column has more than one unique value
         # in the "name" column, e.g. to ensure that a person has at most one guid and id
