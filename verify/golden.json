@@ -1,0 +1,30 @@
+{
+  "columns": [
+    "alternative_names",
+    "born",
+    "date",
+    "dead",
+    "decade",
+    "file_name",
+    "gender",
+    "n_tokens",
+    "name",
+    "party_abbrev",
+    "party_affiliation",
+    "party_affiliation_message",
+    "party_affiliation_uncertain",
+    "protocol",
+    "text",
+    "text_merged",
+    "u_id",
+    "u_ids",
+    "who",
+    "who_intro",
+    "who_intro_id",
+    "year"
+  ],
+  "fingerprint": "04d1e82bb5d11e65d41aca95cf2dff18e0f7e6db20ce01fb04424bae5174e572",
+  "n_columns": 22,
+  "n_files": 16,
+  "n_speeches": 118
+}

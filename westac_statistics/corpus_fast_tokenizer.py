@@ -8,7 +8,7 @@ from numba import jit
 from tqdm.auto import tqdm
 from scipy.sparse import dok_matrix
 from collections import defaultdict
-from typing import Union, Optional
+from typing import Union
 
 
 

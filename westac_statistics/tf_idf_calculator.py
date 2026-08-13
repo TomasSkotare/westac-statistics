@@ -13,7 +13,7 @@ from numba import jit
 import os
 
 
-class TF_IDF_Calculator:
+class TfIdfCalculator:
     TOKENIZER: FastCorpusTokenizer
     SPARSE_COUNT_TRANSPOSED: spmatrix
     SPEECH_INDEX: pd.DataFrame
@@ -242,5 +242,6 @@ class TF_IDF_Calculator:
             df.to_excel(f"{output_directory}{tuple_to_string(name)}.xlsx")
 
 
-if __name__ == "__main__":
-    TF_IDF_Calculator(tokenizer=None)
+# Backward-compatible alias for the pre-v2.1 class name, used by archived
+# notebooks (e.g. docker/py_notebooks/*.py).
+TF_IDF_Calculator = TfIdfCalculator

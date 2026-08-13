@@ -9,7 +9,6 @@ import numpy as np
 import pandas as pd
 from lxml import etree
 from nltk.tokenize import word_tokenize
-from pyparlaclarin.read import speech_iterator
 
 from .config import CorpusConfig, load_config
 
