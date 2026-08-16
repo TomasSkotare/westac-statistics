@@ -23,8 +23,10 @@
     "who_intro_id",
     "year"
   ],
+  "error_fingerprint": "1c0b170312da5d01278ee907e3ea2ec13ce106af423e844f144d64b8d939da4e",
   "fingerprint": "04d1e82bb5d11e65d41aca95cf2dff18e0f7e6db20ce01fb04424bae5174e572",
   "n_columns": 22,
+  "n_error_entries": 6,
   "n_files": 16,
   "n_speeches": 118
 }

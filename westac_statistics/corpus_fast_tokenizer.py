@@ -66,8 +66,9 @@ class FastCorpusTokenizer:
         Returns:
             _type_: _description_
         """
+        SPEECH_INDEX = SPEECH_INDEX.copy()
         SPEECH_INDEX["text_merged"] = SPEECH_INDEX.text.apply(
-            lambda x: " ".join(iter(x)).lower()
+            lambda x: " ".join(iter(x)).lower() if isinstance(x, list) else str(x).lower()
         )
         SPEECH_INDEX["decade"] = SPEECH_INDEX.year.apply(lambda x: x - (x % 10))
         SPEECH_INDEX.drop(
@@ -163,8 +164,9 @@ class FastCorpusTokenizer:
         ]
 
         # Print the percentage of n-grams that are being kept based on the minimum count criteria
+        n_merged = self.MERGED_NGRAMS.shape[0] or 1
         print(
-            f"Keeping {(self.ALLOWED_NGRAMS.shape[0] / self.MERGED_NGRAMS.shape[0]) * 100:.2f}% of ngrams."
+            f"Keeping {(self.ALLOWED_NGRAMS.shape[0] / n_merged) * 100:.2f}% of ngrams."
         )
 
         print("Calculating which words are involved in each column...")
@@ -337,6 +339,21 @@ class FastCorpusTokenizer:
                 ngram_list.append({"uid": uid, "ngrams": valid_ngrams})
             return ngram_list
 
+        # Compile the JIT function in the parent process so forked pool
+        # workers inherit the compiled code instead of recompiling it.
+        # The dummy must match the workers' array layout: they pass
+        # sliding_window_view output, which is A-layout, and numba compiles
+        # per (dtype, layout).
+        _dummy_windows = np.lib.stride_tricks.sliding_window_view(
+            np.zeros(self.NGRAM_LENGTH + 1, dtype=np.uint32), self.NGRAM_LENGTH
+        )
+        numba_count_valid_ngrams(
+            _dummy_windows,
+            self.ALLOWED_NGRAMS,
+            self.WORD_TO_NGRAM_INDEXES,
+            self.ALLOWED_PER_COL,
+        )
+
         chunks = np.array_split(range(len(self.VECTORIZED_TEX_DF)), threads)
 
         with Pool(threads) as pool:
@@ -491,6 +508,14 @@ class FastCorpusTokenizer:
                 data2d = data2d[~remove_rows, :]
                 filtered_data.append(data2d)
 
+            if not filtered_data:
+                # Counter dtype matches np.unique's int64 counts so the
+                # merge signature is the same for empty and non-empty chunks.
+                return (
+                    np.zeros((0, self.NGRAM_LENGTH), dtype=np.uint32),
+                    np.zeros(0, dtype=np.int64),
+                )
+
             unique, count = np.unique(
                 np.concatenate(filtered_data), axis=0, return_counts=True
             )
@@ -561,23 +586,42 @@ class FastCorpusTokenizer:
                 m_idx += remaining
             return merged[:m_idx, :], merged_c[:m_idx]
 
+        # Compile the JIT function in the parent process (dummy calls) so the
+        # merge loop below does not pay JIT cost on the first real merge.
+        # This dispatcher is recreated on every call, so pre-compile it here.
+        # Two signatures occur: round 1 merges worker counters (int64, as
+        # returned by np.unique), later rounds merge this function's own
+        # uint32 output.
+        _empty2d = np.zeros((0, self.NGRAM_LENGTH), dtype=np.uint32)
+        _empty1d_i64 = np.zeros(0, dtype=np.int64)
+        _empty1d_u32 = np.zeros(0, dtype=np.uint32)
+        merge_sorted_arrays(_empty2d, _empty2d, _empty1d_i64, _empty1d_i64)
+        merge_sorted_arrays(_empty2d, _empty2d, _empty1d_u32, _empty1d_u32)
+
         # Merge all counters. Note that they are already sorted.
-        # TODO: This is a slow single-threaded step. We can merge all pairs
-        # of similar size at the same time, and then merge the results of them and so on.
-        # Perhaps possible using map reduce?
+        # TODO: the pairwise rounds below are single-threaded; each round
+        # could be parallelized (map-reduce style).
         print("Merging counters into one array...")
-        merged_ngram, merged_counter = None, None
-        while all_counters:
-            ngrams, counter = all_counters.pop()
-            if merged_ngram is None:
-                merged_ngram = ngrams
-                merged_counter = counter
-                continue
-            merged_ngram, merged_counter = merge_sorted_arrays(
-                merged_ngram, ngrams, merged_counter, counter
+        if not all_counters:
+            return (
+                np.zeros((0, self.NGRAM_LENGTH), dtype=np.uint32),
+                np.zeros(0, dtype=np.int64),
             )
 
-        return merged_ngram, merged_counter
+        # Pairwise tree merge: each round halves the number of arrays, doing
+        # ~3x less total work than linearly accumulating into one array.
+        pending = list(all_counters)
+        while len(pending) > 1:
+            merged_round = []
+            for i in range(0, len(pending) - 1, 2):
+                a, ac = pending[i]
+                b, bc = pending[i + 1]
+                merged_round.append(merge_sorted_arrays(a, b, ac, bc))
+            if len(pending) % 2 == 1:
+                merged_round.append(pending[-1])
+            pending = merged_round
+
+        return pending[0]
 
     def verify_allowed_in_columns(self):
         """Prints the percentage of allowed values in each column of a matrix."""
@@ -879,6 +923,10 @@ class FastCorpusTokenizer:
                 res[:] = 0
 
             return ttr_results
+
+        # Compile the JIT function in the parent process so forked pool
+        # workers inherit the compiled code instead of recompiling it.
+        self._calc_ttr(np.zeros(0, dtype=np.uint16), np.zeros(0, dtype=np.uint32))
 
         chunks = np.array_split(range(len(self.VECTORIZED_TEX_DF)), threads)
         with Pool(threads) as pool:

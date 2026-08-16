@@ -43,16 +43,45 @@ def _extract_protocol(root):
 
 def _extract_speeches_from_file(xml_file):
     xml_file = str(xml_file)
+    errors = []
     try:
         parser = etree.XMLParser(remove_blank_text=True, recover=True)
         root = etree.parse(xml_file, parser).getroot()
     except Exception as e:
         return pd.DataFrame(), [{"file": xml_file, "error": str(e)}]
 
+    if root is None:
+        return pd.DataFrame(), [
+            {"file": xml_file, "error": "unparseable document (no root element)"}
+        ]
+
+    if len(parser.error_log) > 0:
+        first = parser.error_log[0]
+        errors.append(
+            {
+                "file": xml_file,
+                "error": (
+                    f"malformed XML recovered ({len(parser.error_log)} parser "
+                    f"messages, first: {first.message.strip()})"
+                ),
+            }
+        )
+
     date_str = _extract_date(root)
     protocol = _extract_protocol(root)
 
     speaker_notes = root.findall(f".//{TEI_NS}note[@type='speaker']")
+    if not speaker_notes:
+        errors.append(
+            {
+                "file": xml_file,
+                "protocol": protocol,
+                "error": (
+                    "no speaker notes in file; all <u> elements merged into "
+                    "one speech (attribution unreliable)"
+                ),
+            }
+        )
 
     speech_blocks = []
     current_block = []
@@ -77,7 +106,6 @@ def _extract_speeches_from_file(xml_file):
         speech_blocks.append((speaker_note, current_block))
 
     speeches = []
-    errors = []
 
     for speaker_note_elem, u_elems in speech_blocks:
         who_ids = set()
@@ -175,12 +203,26 @@ class CorpusLoader:
                 key=lambda p: p.name,
             )
 
+    # Number of bytes sampled from the start and end of each file when
+    # computing the corpus hash. Catches content changes that preserve
+    # name/size/mtime (cp -a, tar, hardlinks) at a fraction of the cost of a
+    # full content digest.
+    _HASH_SAMPLE_BYTES = 64 * 1024
+
     def _compute_file_hash(self) -> str:
         h = hashlib.sha256()
         for p in self.xml_files:
+            st = p.stat()
             h.update(p.name.encode())
-            h.update(str(p.stat().st_mtime).encode())
-            h.update(str(p.stat().st_size).encode())
+            h.update(str(st.st_mtime).encode())
+            h.update(str(st.st_size).encode())
+            if st.st_size > 0:
+                with open(p, "rb") as f:
+                    head = f.read(self._HASH_SAMPLE_BYTES)
+                    f.seek(max(0, st.st_size - self._HASH_SAMPLE_BYTES))
+                    tail = f.read(self._HASH_SAMPLE_BYTES)
+                h.update(head)
+                h.update(tail)
         return h.hexdigest()[:16]
 
     def _cache_valid(self) -> bool:
@@ -226,6 +268,8 @@ class CorpusLoader:
             os.makedirs(os.path.dirname(self.error_file) or ".", exist_ok=True)
             with open(self.error_file, "w") as f:
                 json.dump(all_errors, f)
+        elif os.path.exists(self.error_file):
+            os.remove(self.error_file)
         return dataframes
 
     def read_speech_dataframe_from_disk(self) -> pd.DataFrame:
@@ -243,7 +287,23 @@ class CorpusLoader:
             per_xml_dataframes = self.perform_threaded_parsing(threads=threads)
             if os.path.exists(self.database_file):
                 os.remove(self.database_file)
-            df = pd.concat(per_xml_dataframes, ignore_index=True)
+            if per_xml_dataframes:
+                df = pd.concat(per_xml_dataframes, ignore_index=True)
+            else:
+                df = pd.DataFrame(
+                    columns=[
+                        "who",
+                        "who_intro_id",
+                        "who_intro",
+                        "date",
+                        "protocol",
+                        "n_tokens",
+                        "u_id",
+                        "u_ids_json",
+                        "text_json",
+                        "file_name",
+                    ]
+                )
             os.makedirs(os.path.dirname(self.database_file) or ".", exist_ok=True)
             df.to_feather(self.database_file, compression="lz4")
             self.speech_dataframe = self.read_speech_dataframe_from_disk()

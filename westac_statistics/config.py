@@ -1,5 +1,4 @@
 from dataclasses import dataclass, field
-from pathlib import Path
 import os
 
 
@@ -11,7 +10,7 @@ class CorpusConfig:
     threads: int = field(default=26)
     corpus_version: str = field(default="v1.6.0")
     persons_version: str = field(default="v1.2.2")
-    parser_version: str = field(default="2.0")
+    parser_version: str = field(default="2.1")
 
 
 def load_config(env_prefix: str = "WESTAC") -> CorpusConfig:

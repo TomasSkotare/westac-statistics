@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import pickle
@@ -87,16 +88,36 @@ PARTY_ABBREV_FALLBACK = {
 }
 
 
+# Bump when the lookup-table building logic changes so cached lookups are
+# invalidated even if the persons data itself did not change.
+METADATA_CACHE_VERSION = "1.0"
+
+PERSONS_FILES = (
+    "name.csv",
+    "party_affiliation.csv",
+    "party_abbreviation.csv",
+    "person.csv",
+)
+
+
+def _compute_persons_hash(persons_path: str) -> str:
+    h = hashlib.sha256()
+    for name in PERSONS_FILES:
+        h.update(name.encode())
+        with open(os.path.join(persons_path, name), "rb") as f:
+            for chunk in iter(lambda: f.read(1 << 20), b""):
+                h.update(chunk)
+    return h.hexdigest()[:16]
+
+
 def _parse_date(v):
     if pd.isna(v) or v == "" or v == "nan":
         return pd.NaT
     s = str(v).strip()
-    for fmt in ("%Y-%m-%d", "%Y-%m", "%Y"):
-        try:
-            return pd.Timestamp(s)
-        except ValueError:
-            continue
-    return pd.NaT
+    try:
+        return pd.Timestamp(s)
+    except ValueError:
+        return pd.NaT
 
 
 def _build_lookup_tables(persons_path: str):
@@ -197,7 +218,12 @@ class MetadataLoader:
         try:
             with open(meta_file) as f:
                 meta = json.load(f)
-            return meta.get("persons_version") == self.config.persons_version
+            return (
+                meta.get("persons_version") == self.config.persons_version
+                and meta.get("metadata_version") == METADATA_CACHE_VERSION
+                and meta.get("persons_hash")
+                == _compute_persons_hash(self.config.persons_path)
+            )
         except Exception:
             return False
 
@@ -241,6 +267,8 @@ class MetadataLoader:
             )
         meta = {
             "persons_version": self.config.persons_version,
+            "metadata_version": METADATA_CACHE_VERSION,
+            "persons_hash": _compute_persons_hash(self.config.persons_path),
             "name_count": len(self.name_lookup),
             "aff_count": len(self.aff_by_person),
         }
@@ -316,6 +344,12 @@ class MetadataLoader:
         n_unique_parties = aff.party.nunique()
         results = []
         for date in dates:
+            if pd.isna(date):
+                row = aff.iloc[0]
+                results.append(
+                    (row["party"], row["abbrev"], True, "No date, used first party")
+                )
+                continue
             dt = pd.Timestamp(date) if not isinstance(date, pd.Timestamp) else date
             result = aff[(aff.start_dt <= dt) & (aff.end_dt >= dt)]
             if len(result) == 1:
@@ -400,7 +434,7 @@ class MetadataLoader:
         ):
             date_grouping = (
                 group.reset_index()
-                .groupby("date")
+                .groupby("date", dropna=False)
                 .agg({"index": list})
                 .rename(columns={"index": "indexes"})
             )

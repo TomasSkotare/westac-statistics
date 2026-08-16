@@ -24,6 +24,7 @@ import sys as _sys
 # The implementation now lives in westac_statistics._deprecated.*.
 for _legacy in ("corpus_parser", "dataframe_optimizer", "git_repository", "metadata_parser"):
     _module = getattr(_deprecated, _legacy)
+    _module.__name__ = f"{__name__}.{_legacy}"
     _sys.modules[f"{__name__}.{_legacy}"] = _module
     setattr(_sys.modules[__name__], _legacy, _module)
 del _legacy, _module, _sys
@@ -38,5 +39,9 @@ __all__ = [
     "MetadataParser",
     "TF_IDF_Calculator",
     "TfIdfCalculator",
+    "corpus_parser",
+    "dataframe_optimizer",
+    "git_repository",
     "load_config",
+    "metadata_parser",
 ]

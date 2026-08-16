@@ -8,7 +8,6 @@ from scipy.sparse import spmatrix
 from .corpus_fast_tokenizer import FastCorpusTokenizer
 
 from tqdm.auto import tqdm
-from numba import jit
 
 import os
 
@@ -150,7 +149,7 @@ class TfIdfCalculator:
         for row, val in (
             usages.sort_values(by="year")[["party_abbrev", "year", "decade"]]
             .groupby("decade")
-            .party_abbrev.agg(lambda x: np.unique(x))
+            .party_abbrev.agg(lambda x: list(np.unique(x)))
             .items()
         ):
             comb_str = comb_str + f'{row}: {", ".join(val)}' + " "

@@ -73,7 +73,12 @@ def _json_safe(value):
 
 
 def canonical_fingerprint(df: pd.DataFrame) -> str:
-    """Return a sha256 fingerprint of the dataframe content (order-insensitive)."""
+    """Return a sha256 fingerprint of the dataframe content.
+
+    Column order is ignored; row order is significant. Row order is
+    deterministic in practice: files are processed in sorted-basename order
+    (basenames are unique across the corpus) and pool.map preserves order.
+    """
     columns = sorted(str(c) for c in df.columns)
     rows = [_json_safe(r) for r in df[columns].to_dict("records")]
     payload = json.dumps(rows, sort_keys=True, default=str, ensure_ascii=False)
@@ -95,7 +100,11 @@ def _select_files(loader: CorpusLoader, per_year: int) -> None:
 
 
 def run_pipeline(per_year: int):
-    """Run the active pipeline on the sample subset. Returns enriched df and loader."""
+    """Run the active pipeline on the sample subset.
+
+    Returns the enriched df, the loader, the metadata loader, and the
+    error-file entries (parse side channel) produced during the run.
+    """
     with tempfile.TemporaryDirectory(prefix="westac_verify_") as tmp:
         config = CorpusConfig(cache_dir=tmp)
         loader = CorpusLoader(config=config)
@@ -105,15 +114,33 @@ def run_pipeline(per_year: int):
         ml = MetadataLoader(config)
         ml.initialize()
         enriched = ml.enrich_speech_dataframe(loader.speech_dataframe)
-        return enriched, loader, ml
+
+        error_entries = []
+        if os.path.exists(loader.error_file):
+            with open(loader.error_file) as f:
+                error_entries = json.load(f)
+        return enriched, loader, ml, error_entries
+
+
+def canonical_error_fingerprint(entries: list) -> str:
+    """Return a sha256 fingerprint of the error-file entries (order-insensitive)."""
+    payload = json.dumps(
+        sorted(entries, key=lambda e: json.dumps(e, sort_keys=True, default=str)),
+        sort_keys=True,
+        default=str,
+        ensure_ascii=False,
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def golden_write() -> dict:
-    enriched, loader, _ = run_pipeline(FILES_PER_YEAR)
+    enriched, loader, _, error_entries = run_pipeline(FILES_PER_YEAR)
     fingerprint = canonical_fingerprint(enriched)
     summary = {
         "fingerprint": fingerprint,
+        "error_fingerprint": canonical_error_fingerprint(error_entries),
         "n_speeches": int(len(enriched)),
+        "n_error_entries": len(error_entries),
         "n_files": int(len(loader.xml_files)),
         "n_columns": int(len(enriched.columns)),
         "columns": sorted(str(c) for c in enriched.columns),
@@ -123,8 +150,9 @@ def golden_write() -> dict:
 
 
 def golden_check() -> bool:
-    current = run_pipeline(FILES_PER_YEAR)[0]
+    current, _, _, error_entries = run_pipeline(FILES_PER_YEAR)
     fingerprint = canonical_fingerprint(current)
+    error_fingerprint = canonical_error_fingerprint(error_entries)
     if not GOLDEN_FILE.exists():
         print(f"ERROR: no golden file at {GOLDEN_FILE}. Run --golden-write first.")
         return False
@@ -133,6 +161,14 @@ def golden_check() -> bool:
     print(f"  golden fingerprint: {golden['fingerprint']}")
     print(f"  current fingerprint: {fingerprint}")
     print(f"  n_speeches: golden={golden['n_speeches']} current={len(current)}")
+    if "error_fingerprint" in golden:
+        ok = ok and error_fingerprint == golden["error_fingerprint"]
+        print(f"  golden error fingerprint: {golden['error_fingerprint']}")
+        print(f"  current error fingerprint: {error_fingerprint}")
+        print(
+            f"  n_error_entries: golden={golden['n_error_entries']} "
+            f"current={len(error_entries)}"
+        )
     if ok:
         print("  RESULT: MATCH - pipeline output unchanged.")
     else:
